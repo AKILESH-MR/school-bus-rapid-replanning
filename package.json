@@ -1,0 +1,19 @@
+{
+  "name": "school-bus-rapid-replanning",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node tests/replanningEdgeCases.test.js && node tests/evaluation.test.js"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "lucide": "^0.475.0"
+  },
+  "devDependencies": {
+    "vite": "^6.1.0"
+  }
+}
