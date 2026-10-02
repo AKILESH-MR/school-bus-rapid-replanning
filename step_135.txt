@@ -1,0 +1,39 @@
+Created At: 2026-09-29T15:21:47+05:30
+Completed At: 2026-09-29T15:21:47+05:30
+File Path: `file:///d:/project/raale%20project1/src/state/store.js`
+Total Lines: 1432
+Total Bytes: 57337
+Showing lines 395 to 425
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+395:         isValid: false,
+396:         reason: "Driver unavailable",
+397:         preferenceScore: 0
+398:       };
+399:     }
+400: 
+401:     if (driver.status === 'sick') {
+402:       return {
+403:         isValid: false,
+404:         reason: "Driver unavailable (Medical / Sickness absence)",
+405:         preferenceScore: 0
+406:       };
+407:     }
+408: 
+409:     if (driver.status === 'on_break' || driver.status === 'offline') {
+410:       return {
+411:         isValid: false,
+412:         reason: "Driver unavailable (Off-duty / Mandatory rest)",
+413:         preferenceScore: 0
+414:       };
+415:     }
+416: 
+417:     if (driver.status !== 'active' && driver.status !== 'standby') {
+418:       return {
+419:         isValid: false,
+420:         reason: "Driver unavailable",
+421:         preferenceScore: 0
+422:       };
+423:     }
+424: 
+425:     // 2 & 4. Check the driver's current assignment and route conflicts
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

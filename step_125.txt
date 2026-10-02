@@ -1,0 +1,33 @@
+Created At: 2026-09-29T15:20:57+05:30
+Completed At: 2026-09-29T15:20:57+05:30
+File Path: `file:///d:/project/raale%20project1/src/state/store.js`
+Total Lines: 1432
+Total Bytes: 57337
+Showing lines 1 to 25
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: // State Management for School Bus Rapid Replanning & Responsible AI System
+2: import { BUSES, ROUTES, STUDENTS, DISRUPTIONS, OPERATIONS_METRICS, DRIVERS, SCHOOLS, DEPOT } from '../data/mockData.js';
+3: import { replanningEngine } from '../utils/replanningEngine.js';
+4: 
+5: function getDistanceMiles(coord1, coord2) {
+6:   if (!coord1 || !coord2) return 0;
+7:   const [lat1, lon1] = coord1;
+8:   const [lat2, lon2] = coord2;
+9:   const dy = (lat2 - lat1) * 69;
+10:   const dx = (lon2 - lon1) * 55;
+11:   return Math.sqrt(dx * dx + dy * dy);
+12: }
+13: 
+14: class AppStore {
+15:   constructor() {
+16:     // Load pending offline changes from localStorage if any
+17:     const savedPending = this.loadPendingOfflineChanges();
+18: 
+19:     this.state = {
+20:       // Navigation & Flow State
+21:       activeScreen: 'auth', // 'auth' -> 'role_selection' -> 'app'
+22:       currentUser: null,
+23:       currentRole: null, // 'dispatcher' | 'operations_manager'
+24:       activeTab: 'dashboard', // 'dashboard', 'buses', 'routes', 'students', 'disruptions', 'replanning', 'reports', 'settings'
+25: 
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

@@ -350,8 +350,12 @@ export function renderMapLayers(filter = 'all') {
           <div style="font-weight: 700; color: ${isNoSignal ? '#DC2626' : isManual ? '#4338CA' : '#0F2747'};">
             ${isNoSignal ? '⚠️ Last Known Location (GPS Lost):' : isManual ? '📍 Dispatcher Manual Checkpoint:' : '🛰️ Current Fleet Position:'}
           </div>
-          <div style="color: #334155; font-weight: 600; margin-top: 1px;">${bus.lastKnownLocation || 'Route Waypoint'}</div>
-          <div style="color: #64748B; font-size: 0.68rem; margin-top: 2px;">Sync: ${bus.lastGpsSync || 'N/A'}</div>
+          <div style="color: #64748B; font-size: 0.68rem; margin-top: 2px;">
+            Sync: ${bus.lastGpsSync || 'N/A'} (Source: <b>${bus.source || (isNoSignal ? 'no_signal' : isManual ? 'manual_dispatcher' : 'mock_telematics')}</b>${bus.ageSeconds !== undefined ? ` · ${bus.ageSeconds}s old` : ''})
+          </div>
+          <div style="font-size: 0.65rem; color: #94A3B8; margin-top: 2px; font-style: italic;">
+            Simulated telemetry (MVP layer — no physical hardware)
+          </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.78rem; color: #475569; margin-bottom: 10px;">

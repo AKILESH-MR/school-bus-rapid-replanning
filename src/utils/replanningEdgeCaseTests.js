@@ -44,12 +44,18 @@ export function runReplanningEdgeCaseTests(customStore = null) {
     const initialLoad = initialBus ? initialBus.currentLoad : 0;
     const initialCapacity = initialBus ? initialBus.capacity : 54;
 
-    // Execute cancellation
+    // Execute cancellation request
     testStore.cancelStudent(studentToCancel.id);
+
+    const disruption = testStore.getState().disruptions.find(d => d.type === 'student_cancel' && d.studentId === studentToCancel.id);
+
+    // Human-in-the-loop: Dispatcher reviews and accepts the AI recommendation
+    if (disruption) {
+      testStore.acceptAIPlan(disruption.id);
+    }
 
     const updatedStudent = testStore.getState().students.find(s => s.id === studentToCancel.id);
     const updatedBus = testStore.getState().buses.find(b => b.id === initialBusId);
-    const disruption = testStore.getState().disruptions.find(d => d.type === 'student_cancel' && d.studentId === studentToCancel.id);
 
     const isStudentCancelled = updatedStudent.status === 'absent_cancelled' && updatedStudent.busId === 'UNASSIGNED';
     const isLoadDecremented = updatedBus ? updatedBus.currentLoad === initialLoad - 1 : true;
@@ -362,7 +368,7 @@ export function runReplanningEdgeCaseTests(customStore = null) {
     const isOnline = testStore.getState().networkStatus === 'online';
     const isQueueFlushed = testStore.getState().pendingOfflineChanges.length === 0;
 
-    const passed = isOffline && isQueued && isOnline && isQueueFlushed;
+    const passed = isOffline && isQueued && isOnline && isQueueFlushed; if (!passed) console.log('DEBUG TEST 7:', { isOffline, isQueued, isOnline, isQueueFlushed, pending: testStore.getState().pendingOfflineChanges });
     const t1 = performance.now();
 
     recordTest({
@@ -418,6 +424,10 @@ export function runReplanningEdgeCaseTests(customStore = null) {
     const stu3 = testStore.getState().students.find(s => s.routeId === 'RT-101' && s.status !== 'absent_cancelled');
     if (stu3) {
       testStore.cancelStudent(stu3.id);
+      const dis3 = testStore.getState().disruptions.find(d => d.type === 'student_cancel' && d.studentId === stu3.id);
+      if (dis3) {
+        testStore.acceptAIPlan(dis3.id);
+      }
     }
 
     const state = testStore.getState();

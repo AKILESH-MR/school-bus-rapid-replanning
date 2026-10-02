@@ -1,125 +1,92 @@
-# Representative Usability Validation Plan & Report (MVP)
+# Developer Walkthrough Verification Report & Real Validation Plan
 
-This document serves as the formal usability validation plan and report for the Rapid Replanning MVP. It details a reproducible validation procedure designed to evaluate core disruption workflows across key operational roles.
+**Project:** School Bus Rapid Replanning & Responsible AI System  
+**Version:** 1.0.0 (Internal Verification)  
+**Date:** September 2026  
+**Status:** Internal Developer Walkthrough Verified; Real Stakeholder Testing Pending  
+
+---
 
 > [!IMPORTANT]
-> **REPRESENTATIVE / SIMULATED VALIDATION NOTICE:**  
-> Live human stakeholders (external district dispatchers, operations managers, and transport coordinators) were unavailable for live field trials during this phase of evaluation. Therefore, the usability results recorded below reflect a **representative/simulated usability validation procedure** conducted via structured walkthrough protocols mimicking target user roles. No real user identities, quotes, or field trial results are fabricated or claimed.
+> ### MANDATORY DECLARATION ON STAKEHOLDER VALIDATION
+> **No real stakeholder validation has been conducted yet.**  
+> - No active school district dispatchers, operations managers, or transport coordinators have operated or evaluated this prototype in live district operations.
+> - No real user interviews, satisfaction surveys, or empirical field study data exist for this project.
+> - All qualitative walkthrough notes and task completion timings documented below reflect **internal developer verification of procedural workflows** conducted to ensure the user interface and replanning engine function correctly before real stakeholders are engaged.
+> - The comprehensive protocol for future human evaluation is formally specified in [STAKEHOLDER_VALIDATION_PLAN.md](STAKEHOLDER_VALIDATION_PLAN.md).
 
 ---
 
-## 1. Target Personas (Simulated Walkthrough Protocols)
+## 1. Scope of Internal Developer Verification
 
-1. **Dispatcher**: Primary system user. Responsible for day-to-day route monitoring, incident triage, and approving or modifying AI-generated emergency replanning proposals.
-2. **Operations Manager**: Supervisory role. Focuses on overall fleet performance, SLA compliance, recovery time metrics, and historical audit logs.
-3. **Transport Coordinator**: Compliance and special-needs manager. Ensures strict adherence to ADA requirements (e.g., wheelchair lift availability) and destination school compatibility.
+Prior to conducting external stakeholder trials, the engineering team executed a structured developer walkthrough protocol across the application's three core disruption workflows. The purpose of this internal walkthrough was strictly technical:
 
----
-
-## 2. Reproducible Validation Procedure
-
-Facilitators or evaluators can reproduce this usability validation using the following step-by-step protocol in the dashboard application:
-
-### Step 1: Environment Setup
-1. Launch the application locally (`npm run dev` or open build).
-2. Ensure network status is set to "Online" on the main control panel.
-3. Log in and select the appropriate role (`Dispatcher` or `Operations Manager`).
-
-### Step 2: Test Task Execution
-
-#### Task 1: Student Cancellation Scenario
-- **Procedure:**
-  1. Navigate to the **Disruptions** tab or click **Record Cancellation**.
-  2. Select student **Maya Lin** (Route 101 - Oakridge Northern Run).
-  3. Observe the AI engine's proposed plan (bypassing Japantown Plaza stop, saving ~3.5 min).
-  4. Verify the Before/After route comparison and click **Approve & Broadcast**.
-- **Metrics Recorded:** Task Completion, E2E Recovery Time (s), Explanation Usefulness, Manual Intervention Usability, Fallback Understanding, Qualitative Observations.
-
-#### Task 2: Urgent Student Addition Scenario
-- **Procedure:**
-  1. Navigate to **Disruptions** -> **Add Urgent Student**.
-  2. Input student: **Noah Davies**, Destination: **Lincoln Middle School**, Special Need: **Wheelchair Accessibility Required**.
-  3. Observe the AI candidate evaluations (checking capacity, ADA wheelchair lift availability, driver status, and destination compatibility).
-  4. Review the recommended plan for **BUS-02** (Thomas Built Saf-T-Liner C2 with ADA lift) and click **Accept Plan**.
-- **Metrics Recorded:** Task Completion, E2E Recovery Time (s), Explanation Usefulness, Manual Intervention Usability, Fallback Understanding, Qualitative Observations.
-
-#### Task 3: Vehicle Breakdown Scenario
-- **Procedure:**
-  1. Select **BUS-04** on the Fleet View and trigger **Declare Vehicle Breakdown** (Cole & Haight St stall).
-  2. Confirm BUS-04 status changes to `Breakdown` with 36 stranded passengers.
-  3. Observe the AI engine evaluate all 8 fleet buses and reject invalid candidates (lacking capacity or drivers).
-  4. Review the recommendation for depot standby **BUS-05** (Amina Al-Mansoor, 54 seats, ADA lift verified).
-  5. Click **Approve Fleet Swap & Dispatch**.
-- **Metrics Recorded:** Task Completion, E2E Recovery Time (s), Explanation Usefulness, Manual Intervention Usability, Fallback Understanding, Qualitative Observations.
+1. Verify that all UI views (`Dashboard`, `ReplanningView`, `BusesView`, `ReportsView`) render without JavaScript console errors.
+2. Confirm that human-in-the-loop controls (Accept, Modify, Reject) correctly trigger state mutations in `store.js` without premature automated commits.
+3. Validate that 12-dimension explanation cards, candidate rejection reasons, and GPS telematics degradation banners render accurately.
+4. Ensure that the prototype is completely prepared for real stakeholder sessions according to [STAKEHOLDER_VALIDATION_PLAN.md](STAKEHOLDER_VALIDATION_PLAN.md).
 
 ---
 
-## 3. Usability Validation Results (Representative Simulation)
+## 2. Procedural Verification of Workflows
 
-### Task 1: Student Cancellation Workflow
-*Scenario: Parent notifies sickness via app for student Maya Lin on Route 101.*
+The engineering team verified that each workflow can be executed end-to-end within the dashboard application:
 
-| Persona Protocol | Task Completion | E2E Recovery Time | Explanation Usefulness | Manual Intervention Usability | Fallback Understanding | Feedback / Observations |
-| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Dispatcher** | Yes | 15s | High | High | High | Clear, concise stop-bypass summary; immediate manifest update. |
-| **Operations Manager** | Yes | 20s | High | Medium | High | Good visibility into dwell time savings and schedule variance. |
-| **Transport Coordinator** | Yes | 18s | High | High | High | Verified accurate stop removal without affecting adjacent student pickups. |
+### Workflow 1: Student Cancellation Procedure
+- **Procedural Steps Verified:**
+  1. Trigger cancellation for student Maya Lin on Route 101.
+  2. Verify that disruption enters `unresolved` state with `cancellationPending` badge.
+  3. Verify that the live route stops and vehicle load are **not** decremented prior to approval.
+  4. Click **Accept & Broadcast** and confirm that Maya Lin transitions to `absent_cancelled`, bus load decrements by 1, and an audit event (`CANCELLATION_APPROVE`) is recorded.
+- **Internal Technical Result:** Procedural integrity confirmed. In-memory state and audit logs updated correctly.
 
----
+### Workflow 2: Urgent Student Addition Procedure
+- **Procedural Steps Verified:**
+  1. Open Add Urgent Student modal and input Noah Davies (requires ADA wheelchair lift, destination Lincoln Middle School).
+  2. Verify that non-lift vehicles (e.g. BUS-01) and over-capacity vehicles are filtered out with explicit rejection reasons displayed in the candidate list.
+  3. Confirm that the Greedy Insertion Heuristic identifies the optimal insertion index along remaining stops on feasible candidate BUS-02.
+  4. Click **Accept Plan** and verify that Noah Davies is assigned to BUS-02, the stop is inserted at the calculated index, and an audit event (`URGENT_ADD_APPROVED`) is recorded.
+- **Internal Technical Result:** Constraint enforcement and greedy insertion index preservation confirmed.
 
-### Task 2: Urgent Student Addition Workflow
-*Scenario: Emergency pickup for Noah Davies requiring ADA wheelchair lift for Lincoln Middle School.*
-
-| Persona Protocol | Task Completion | E2E Recovery Time | Explanation Usefulness | Manual Intervention Usability | Fallback Understanding | Feedback / Observations |
-| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Dispatcher** | Yes | 25s | High | High | High | ADA constraint matching explicitly highlighted in recommendation. |
-| **Operations Manager** | Yes | 30s | High | High | High | Full candidate transparency; clear rejection reasons for full/incompatible buses. |
-| **Transport Coordinator** | Yes | 28s | High | High | Medium | Confirmed wheelchair lift amenity flag was strictly verified. |
-
----
-
-### Task 3: Vehicle Breakdown Workflow
-*Scenario: BUS-04 engine stall at Cole & Haight St with 36 stranded passengers.*
-
-| Persona Protocol | Task Completion | E2E Recovery Time | Explanation Usefulness | Manual Intervention Usability | Fallback Understanding | Feedback / Observations |
-| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Dispatcher** | Yes | 35s | High | High | High | Rapid standby fleet selection from depot with driver availability lock. |
-| **Operations Manager** | Yes | 40s | High | High | High | Complete audit log generated with clear before/after load distribution. |
-| **Transport Coordinator** | Yes | 38s | Medium | High | High | Fallback instructions when constraints fail are explicit and clear. |
+### Workflow 3: Vehicle Breakdown & Standby Fleet Swap Procedure
+- **Procedural Steps Verified:**
+  1. Trigger vehicle breakdown event for BUS-04 at Cole & Haight St with 36 stranded students.
+  2. Verify that BUS-04 transitions to `breakdown` status and is excluded from receiving new assignments.
+  3. Verify that candidate generator queries available depot standby buses and active standby drivers.
+  4. Confirm that standby BUS-05 (54 capacity, ADA lift verified, driver assigned) is recommended.
+  5. Click **Approve Fleet Swap & Dispatch** and verify that stranded students are reassigned and audit trail is logged.
+- **Internal Technical Result:** Fleet swap and driver assignment locking verified.
 
 ---
 
-## 4. Summary Usability Metrics
+## 3. Real Stakeholder Validation Scorecard (Blank Pre-Trial Template)
 
-* **Task Completion Rate:** 100% (9/9 representative persona scenario evaluations completed successfully)
-* **Average E2E Recovery Time:** ~27.6 seconds across representative task executions (Target: <= 480 seconds / 8 minutes)
-* **Qualitative Ratings Breakdown:**
-  * **Explanation Usefulness:** 88% High, 12% Medium
-  * **Manual Intervention Usability:** 88% High, 12% Medium
-  * **Fallback Understanding:** 88% High, 12% Medium
+Because **no real stakeholder validation has been conducted yet**, the table below is provided as a blank template for recording future trials with active district personnel:
 
----
-
-## 5. Findings, Limitations & Improvement Points
-
-### Key Findings
-1. **Human-in-the-Loop Clarity:** Placing all AI recommendations in an unapproved review state maintains high user confidence and prevents unwanted automated actions.
-2. **Deterministic Constraint Visibility:** Explicitly showing candidate rejection reasons (e.g., "Driver already assigned to RT-101", "Vehicle lacks ADA Lift") makes recommendation rationale transparent.
-3. **Intuitive Fallbacks:** Manual location overrides (for GPS signal loss) and offline change queuing behave predictably during technical disruptions.
-
-### Limitations
-1. **Representative Evaluation:** Validation was conducted in a controlled simulation environment rather than live field testing during peak morning district operations.
-2. **External Communication Latencies:** Measured E2E recovery times do not include real-world communication delays such as phone calls or radio check-ins between dispatchers and drivers.
-
-### Improvement Points
-1. **Granular Constraint Filters:** Provide visual toggle filters on candidate evaluation cards for complex edge cases.
-2. **Custom Audio/Visual Alerts:** Add optional audible notification tones when critical breakdown events are declared.
+| Participant ID | Role (Dispatcher / Ops Mgr / Coordinator) | Scenario Tested | $T_{\text{understand}}$ | $T_{\text{review}}$ | $T_{\text{decision}}$ | $T_{\text{e2e}}$ | SLA Met? ($\le 480\text{s}$) | Notes / Usability Friction Observed |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| *Pending Trial* | *Pending Trial* | Student Cancellation | — | — | — | — | [ ] Yes [ ] No | *Awaiting real stakeholder validation session* |
+| *Pending Trial* | *Pending Trial* | Urgent Student Add | — | — | — | — | [ ] Yes [ ] No | *Awaiting real stakeholder validation session* |
+| *Pending Trial* | *Pending Trial* | Vehicle Breakdown | — | — | — | — | [ ] Yes [ ] No | *Awaiting real stakeholder validation session* |
+| *Pending Trial* | *Pending Trial* | Stale GPS Triage | — | — | — | — | [ ] Yes [ ] No | *Awaiting real stakeholder validation session* |
+| *Pending Trial* | *Pending Trial* | Offline Queue Sync | — | — | — | — | [ ] Yes [ ] No | *Awaiting real stakeholder validation session* |
 
 ---
 
-## 6. Instructions for Facilitators
+## 4. Key Limitations & Operational Requirements
 
-1. Present evaluators with scenario prompts without explaining UI controls beforehand.
-2. Measure **E2E Recovery Time** from disruption creation until the user reviews and clicks **Approve** (or completes manual resolution).
-3. If an evaluator encounters friction, note the exact UI element in the feedback section without intervening unless completely blocked.
-4. Verify that evaluators can articulate *why* a specific vehicle was recommended before approving the plan.
+1. **Mandatory Human Field Testing Required:**
+   - Although automated test suites (10 suites, 212+ unit assertions) pass with 100% success, empirical testing with live dispatchers during active morning commute windows is an essential prerequisite for production deployment.
+2. **Simulated Cognitive Load:**
+   - Internal developer walkthroughs cannot replicate the high-stress, multi-tasking environment of an active transit dispatch office managing simultaneous radio calls, phone complaints, and driver emergencies.
+3. **Institutional Labor & District Policy Validation:**
+   - District-specific union rules (e.g., mandatory rest breaks, maximum consecutive driving hours, route bidding rules) must be reviewed by active district labor representatives.
+
+---
+
+## 5. Next Steps for Real Stakeholder Evaluation
+
+1. Convene a working group of 3–5 professional district dispatchers and 1–2 operations supervisors.
+2. Execute the protocol detailed in [STAKEHOLDER_VALIDATION_PLAN.md](STAKEHOLDER_VALIDATION_PLAN.md).
+3. Record authentic stopwatch times and qualitative feedback on the standardized scorecards.
+4. Document all usability friction points and incorporate feedback into the pre-production roadmap.

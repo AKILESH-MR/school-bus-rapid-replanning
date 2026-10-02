@@ -1,0 +1,109 @@
+Created At: 2026-09-29T15:20:05+05:30
+Completed At: 2026-09-29T15:20:05+05:30
+File Path: `file:///d:/project/raale%20project1/src/state/store.js`
+Total Lines: 1432
+Total Bytes: 57337
+Showing lines 450 to 550
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+450:     const preferenceScore = driver.status === 'standby' ? 25 : 15;
+451: 
+452:     return {
+453:       isValid: true,
+454:       reason: null,
+455:       preferenceScore
+456:     };
+457:   }
+458: 
+459:   // 1-10. Vehicle Unavailable / Bus Breakdown Rapid Replanning Engine
+460:   handleVehicleBreakdown(busId, incidentDetails = {}) {
+461:     const brokenBus = this.state.buses.find(b => b.id === busId);
+462:     if (!brokenBus) return;
+463: 
+464:     // 1. Mark the bus as unavailable
+465:     brokenBus.status = 'breakdown';
+466:     brokenBus.speedKmh = 0;
+467:     if (incidentDetails.impact) {
+468:       brokenBus.breakdownNote = incidentDetails.impact;
+469:     }
+470: 
+471:     // 2. Identify its affected route
+472:     const route = this.state.routes.find(r => r.id === brokenBus.routeId || r.assignedBus === brokenBus.id);
+473: 
+474:     // 3. Identify students affected by the unavailable bus
+475:     const affectedStudents = this.state.students.filter(s =>
+476:       s.busId === brokenBus.id || (route && s.routeId === route.id && s.status !== 'absent_cancelled')
+477:     );
+478:     const affectedLoad = affectedStudents.length || brokenBus.currentLoad || 0;
+479: 
+480:     // 4-8. Find available replacement buses (Never recommend the unavailable bus)
+481:     const candidateEvaluations = [];
+482:     const availableDrivers = this.state.drivers.filter(d => d.status === 'active' || d.status === 'standby');
+483: 
+484:     for (const candidate of this.state.buses) {
+485:       // NEVER recommend the unavailable bus
+486:       if (candidate.id === brokenBus.id) continue;
+487: 
+488:       const reasons = [];
+489:       const candidateRoute = this.state.routes.find(r => r.id === candidate.routeId);
+490:       const isStandbyInDepot = candidate.status === 'in_depot';
+491: 
+492:       // Status check
+493:       if (['breakdown', 'offline', 'maintenance'].includes(candidate.status)) {
+494:         reasons.push(`Vehicle unavailable (${candidate.status})`);
+495:       }
+496: 
+497:       // Capacity check (must support the affected passenger load)
+498:       if (candidate.capacity < affectedLoad) {
+499:         reasons.push(`Insufficient capacity (${candidate.capacity} seats < ${affectedLoad} required students)`);
+500:       }
+501: 
+502:       // Route compatibility & Accessibility check
+503:       const needsWheelchair = affectedStudents.some(s => s.specialNeeds && s.specialNeeds.toLowerCase().includes('wheelchair'));
+504:       if (needsWheelchair) {
+505:         const hasLift = candidate.amenities && candidate.amenities.some(a => a.toLowerCase().includes('wheelchair'));
+506:         if (!hasLift) {
+507:           reasons.push('Incompatible: Lacks required ADA Wheelchair Lift for special needs passengers');
+508:         }
+509:       }
+510: 
+511:       // Battery / Fuel check
+512:       if (candidate.fuelLevel < 30) {
+513:         reasons.push(`Low fuel/battery (${candidate.fuelLevel}%) insufficient for emergency dispatch`);
+514:       }
+515: 
+516:       // Driver availability & commitments validation
+517:       let candidateDriver = this.state.drivers.find(d => d.id === candidate.driverId);
+518:       if (!candidateDriver && isStandbyInDepot) {
+519:         // Find reserve standby driver with no commitment conflict
+520:         candidateDriver = availableDrivers.find(d =>
+521:           this.validateDriverAvailabilityAndCommitments(d, candidate, route).isValid
+522:         ) || availableDrivers[0] || null;
+523:       }
+524: 
+525:       const driverCheck = this.validateDriverAvailabilityAndCommitments(candidateDriver, candidate, route);
+526:       if (!driverCheck.isValid) {
+527:         reasons.push(driverCheck.reason);
+528:       }
+529: 
+530:       const isFeasible = reasons.length === 0;
+531: 
+532:       const driverLocation = candidate.status === 'in_depot' ? [37.7550, -122.4050] : (candidate.coords || [37.77, -122.42]);
+533:       const disruptionLocation = brokenBus.coords || incidentDetails.coords || [37.77, -122.42];
+534:       const driverDistanceMi = getDistanceMiles(driverLocation, disruptionLocation);
+535: 
+536:       // Deterministic scoring (prefer available driver with zero commitment conflict and closer proximity)
+537:       const score = isFeasible
+538:         ? (100 + (candidate.capacity - affectedLoad) * 2 + driverCheck.preferenceScore + (candidate.healthScore || 90) * 0.1 - driverDistanceMi * 2)
+539:         : 0;
+540: 
+541:       candidateEvaluations.push({
+542:         bus: candidate,
+543:         route: candidateRoute,
+544:         driver: candidateDriver,
+545:         isFeasible,
+546:         reasons,
+547:         seatsAvailable: candidate.capacity - (isStandbyInDepot ? 0 : (candidate.currentLoad || 0)),
+548:         delayMins: isStandbyInDepot ? 4.0 : 7.5,
+549:         driverDistanceMi,
+550:         score
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

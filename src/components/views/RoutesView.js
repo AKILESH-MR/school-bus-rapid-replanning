@@ -249,7 +249,8 @@ export function renderRoutesView() {
         const bus = buses.find(b => b.id === route.assignedBus);
         const isDisrupted = route.status === 'disrupted';
         const isDelayed = route.status === 'delayed';
-        const progressPct = Math.round((route.completedStops / route.totalStops) * 100);
+        const completedCount = Array.isArray(route.completedStops) ? route.completedStops.length : (route.completedStops || 0);
+        const progressPct = route.routeProgressPercentage != null ? route.routeProgressPercentage : Math.round((completedCount / route.totalStops) * 100);
         const totalStudents = route.stops.reduce((sum, s) => sum + (s.studentsCount || 0), 0);
         const mapId = `route-map-${route.id}`;
 
@@ -300,7 +301,7 @@ export function renderRoutesView() {
             <div style="padding: 14px 24px; border-bottom: 1px solid #F1F5F9; background: #FAFBFD;">
               <div style="display: flex; justify-content: space-between; font-size: 0.72rem; font-weight: 700; color: #64748B; margin-bottom: 6px;">
                 <span>Departure: ${route.scheduledStartTime}</span>
-                <span>${route.completedStops} / ${route.totalStops} stops completed</span>
+                <span>${completedCount} / ${route.totalStops} stops completed</span>
                 <span>Bell: ${route.scheduledArrivalTime}</span>
               </div>
               <div style="height: 8px; background: #E2E8F0; border-radius: 9999px; overflow: hidden;">

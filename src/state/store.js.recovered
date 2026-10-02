@@ -1,0 +1,265 @@
+// State Management for School Bus Rapid Replanning & Responsible AI System
+import { BUSES, ROUTES, STUDENTS, DISRUPTIONS, OPERATIONS_METRICS, DRIVERS, SCHOOLS, DEPOT } from '../data/mockData.js';
+
+class AppStore {
+  constructor() {
+    this.state = {
+      // Navigation & Flow State
+      activeScreen: 'auth', // 'auth' -> 'role_selection' -> 'app'
+      currentUser: null,
+      currentRole: null, // 'dispatcher' | 'operations_manager'
+      activeTab: 'dashboard', // 'dashboard', 'buses', 'routes', 'students', 'disruptions', 'replanning', 'reports', 'settings'
+      
+      // Domain Entities
+      buses: [...BUSES],
+      routes: [...ROUTES],
+      students: [...STUDENTS],
+      disruptions: [...DISRUPTIONS],
+      drivers: [...DRIVERS],
+      schools: [...SCHOOLS],
+      depot: { ...DEPOT },
+      metrics: { ...OPERATIONS_METRICS },
+      
+      // Interaction State
+      selectedBusId: null,
+      selectedRouteId: null,
+      selectedDisruptionId: "DIS-2026-001", // Default active critical disruption
+      searchQuery: "",
+      filterStatus: "all",
+      
+      // Modals
+      activeModal: null, // 'create_disruption' | 'add_student' | 'bus_detail' | null
+      modalPayload: null,
+      
+      // Toast notifications
+      toasts: []
+    };
+    
+    this.listeners = new Set();
+  }
+
+  getState() {
+    return this.state;
+  }
+
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  notify() {
+    for (const listener of this.listeners) {
+      listener(this.state);
+    }
+  }
+
+  // Auth Flow Actions
+  login(userProfile) {
+    this.state.currentUser = userProfile;
+    this.state.activeScreen = 'role_selection';
+    this.showToast(`Welcome, ${userProfile.name}! Select your operational role.`, 'info');
+    this.notify();
+  }
+
+  selectRole(role) {
+    this.state.currentRole = role;
+    this.state.activeScreen = 'app';
+    this.state.activeTab = 'dashboard';
+    
+    const roleName = role === 'dispatcher' ? 'Dispatcher Control Room' : 'Operations Manager Oversight';
+    this.showToast(`Active Session: ${roleName}`, 'success');
+    this.notify();
+  }
+
+  switchRole(role) {
+    this.state.currentRole = role;
+    const roleName = role === 'dispatcher' ? 'Dispatcher Control Room' : 'Operations Manager Oversight';
+    this.showToast(`Switched view to ${roleName}`, 'info');
+    this.notify();
+  }
+
+  logout() {
+    this.state.currentUser = null;
+    this.state.currentRole = null;
+    this.state.activeScreen = 'auth';
+    this.state.activeTab = 'dashboard';
+    this.showToast('Logged out of Transport Control Center', 'info');
+    this.notify();
+  }
+
+  setActiveTab(tabName) {
+    this.state.activeTab = tabName;
+    this.notify();
+  }
+
+  setSearchQuery(q) {
+    this.state.searchQuery = q;
+    this.notify();
+  }
+
+  setFilterStatus(status) {
+    this.state.filterStatus = status;
+    this.notify();
+  }
+
+  setSelectedDisruption(id) {
+    this.state.selectedDisruptionId = id;
+    this.notify();
+  }
+
+  setSelectedBus(id) {
+    this.state.selectedBusId = id;
+    this.notify();
+  }
+
+  // Operational Actions
+  createDisruption(disruptionData) {
+    const newId = `DIS-2026-00${this.state.disruptions.length + 1}`;
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Generate simulated AI Recommendation
+    const newDisruption = {
+      id: newId,
+      reportedAt: timeStr,
+      status: 'unresolved',
+      aiRecommendationAvailable: true,
+      aiRecommendation: {
+        planId: `REC-AI-${Math.floor(100 + Math.random() * 900)}`,
+        strategy: disruptionData.type === 'breakdown' 
+          ? 'Emergency Standby Fleet Swap'
+          : disruptionData.type === 'driver_unavailability'
+          ? 'Reserve Driver Dispatch'
+          : 'Dynamic Stop Re-sequencing',
+        standbyBusAssigned: disruptionData.type === 'breakdown' ? 'BUS-06' : null,
+        reserveDriverAssigned: 'DRV-107 (Robert MacIntyre)',
+        estRecoveryTimeMins: (Math.random() * 4 + 3).toFixed(1),
+        newEtaDifference: '+4 min',
+        safetyScore: 99.4,
+        fairnessScore: 98.0,
+        explanation: `Responsible AI assessed current route buffer times and assigned reserve resources to mitigate ${disruptionData.type} impact with zero SLA violation.`,
+        tradeoffs: ['Minimal operational variance', 'Full passenger safety verified']
+      },
+      ...disruptionData
+    };
+
+    this.state.disruptions.unshift(newDisruption);
+    
+    // Update bus status if relevant
+    if (disruptionData.busId) {
+      const bus = this.state.buses.find(b => b.id === disruptionData.busId);
+      if (bus && disruptionData.type === 'breakdown') {
+        bus.status = 'breakdown';
+        bus.speedKmh = 0;
+      }
+    }
+
+    // Add audit log
+    this.state.metrics.recentAuditLogs.unshift({
+      id: `LOG-${Math.floor(600 + Math.random() * 300)}`,
+      time: timeStr,
+      user: this.state.currentUser ? this.state.currentUser.name : 'Dispatcher',
+      event: `Declared Disruption: ${disruptionData.title}`,
+      status: 'PENDING_REVIEW'
+    });
+
+    this.state.metrics.activeDisruptionsCount += 1;
+    this.showToast(`New Disruption Logged: ${disruptionData.title}`, 'danger');
+    this.closeModal();
+    this.notify();
+  }
+
+  addStudent(studentData) {
+    const newId = `STU-${Math.floor(1010 + Math.random() * 8000)}`;
+    const newStudent = {
+      id: newId,
+      status: 'urgent_added',
+      photo: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=100&auto=format&fit=crop&q=80',
+      ...studentData
+    };
+
+    this.state.students.unshift(newStudent);
+    this.state.metrics.totalStudentsToday += 1;
+
+    this.showToast(`Urgent Student Added: ${studentData.name}. AI Routing update suggested.`, 'info');
+    this.closeModal();
+    this.notify();
+  }
+
+  acceptAIPlan(disruptionId) {
+    const disruption = this.state.disruptions.find(d => d.id === disruptionId);
+    if (!disruption) return;
+
+    disruption.status = 'accepted';
+    
+    // If bus breakdown resolved by standby bus
+    if (disruption.type === 'breakdown' && disruption.aiRecommendation?.standbyBusAssigned) {
+      const standby = this.state.buses.find(b => b.id === disruption.aiRecommendation.standbyBusAssigned);
+      if (standby) {
+        standby.status = 'in_transit';
+        standby.routeId = disruption.routeId;
+      }
+    }
+
+    this.state.metrics.resolvedDisruptionsToday += 1;
+    this.state.metrics.activeDisruptionsCount = Math.max(0, this.state.metrics.activeDisruptionsCount - 1);
+    
+    // Log
+    this.state.metrics.recentAuditLogs.unshift({
+      id: `LOG-${Math.floor(600 + Math.random() * 300)}`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      user: this.state.currentUser ? this.state.currentUser.name : 'Dispatcher',
+      event: `Accepted AI Replanning Plan ${disruption.aiRecommendation?.planId} for ${disruption.id}`,
+      status: 'EXECUTED'
+    });
+
+    this.showToast(`AI Replanning Recommendation Accepted for ${disruption.id}! Dispatched to Fleet.`, 'success');
+    this.notify();
+  }
+
+  rejectAIPlan(disruptionId, reason = "Manual Route Override") {
+    const disruption = this.state.disruptions.find(d => d.id === disruptionId);
+    if (!disruption) return;
+
+    disruption.status = 'rejected';
+    disruption.rejectionReason = reason;
+
+    this.state.metrics.recentAuditLogs.unshift({
+      id: `LOG-${Math.floor(600 + Math.random() * 300)}`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      user: this.state.currentUser ? this.state.currentUser.name : 'Dispatcher',
+      event: `Rejected AI Plan for ${disruption.id} - Reason: ${reason}`,
+      status: 'MANUAL_OVERRIDE'
+    });
+
+    this.showToast(`AI Plan Rejected. Manual override flagged for Dispatcher.`, 'warning');
+    this.notify();
+  }
+
+  // Modals
+  openModal(modalType, payload = null) {
+    this.state.activeModal = modalType;
+    this.state.modalPayload = payload;
+    this.notify();
+  }
+
+  closeModal() {
+    this.state.activeModal = null;
+    this.state.modalPayload = null;
+    this.notify();
+  }
+
+  // Toast UI
+  showToast(message, type = 'info') {
+    const id = Date.now() + Math.random();
+    this.state.toasts.push({ id, message, type });
+    this.notify();
+
+    setTimeout(() => {
+      this.state.toasts = this.state.toasts.filter(t => t.id !== id);
+      this.notify();
+    }, 4000);
+  }
+}
+
+export const store = new AppStore();

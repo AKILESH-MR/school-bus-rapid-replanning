@@ -13,13 +13,78 @@ function busOperationalStatus(bus) {
 }
 
 function gpsStatus(bus) {
-  if (bus.gpsStatus === 'manual' || bus.isManualLocation) {
-    return { label: 'Manual Checkpoint', icon: '📍', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE', isLive: false };
+  const norm = (bus.gpsStatus || 'live').toLowerCase();
+  const lastSyncMs = bus._lastGpsSyncTimeMs || (Date.now() - (norm === 'live' ? 15000 : 180000));
+  const ageSeconds = bus.ageSeconds !== undefined ? bus.ageSeconds : Math.max(0, Math.floor((Date.now() - lastSyncMs) / 1000));
+
+  if (norm === 'manual' || bus.isManualLocation) {
+    return {
+      status: 'MANUAL',
+      label: 'Manual Checkpoint',
+      icon: '📍',
+      color: '#2563EB',
+      bg: '#EFF6FF',
+      border: '#BFDBFE',
+      isLive: false,
+      ageSeconds,
+      warning: null,
+      subtext: 'Dispatcher Verified Fix'
+    };
   }
-  if (bus.gpsStatus === 'no_signal' || bus.status === 'breakdown' || bus.status === 'maintenance') {
-    return { label: 'No Signal', icon: '📡', color: '#EF4444', bg: '#FEF2F2', border: '#FECACA', isLive: false };
+  if (norm === 'no_signal' || bus.status === 'breakdown' || bus.status === 'maintenance') {
+    return {
+      status: 'NO_SIGNAL',
+      label: 'No Signal',
+      icon: '📡',
+      color: '#EF4444',
+      bg: '#FEF2F2',
+      border: '#FECACA',
+      isLive: false,
+      ageSeconds,
+      warning: 'Telematics signal lost. Using last-known location only. Manual dispatcher checkpoint override available.',
+      subtext: 'Signal Lost — Not Live'
+    };
   }
-  return { label: 'Live Fix', icon: '🛰️', color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0', isLive: true };
+  if (norm === 'stale' || ageSeconds > 120) {
+    return {
+      status: 'STALE',
+      label: `Stale (${Math.floor(ageSeconds / 60)}m old)`,
+      icon: '⚠️',
+      color: '#EA580C',
+      bg: '#FFF7ED',
+      border: '#FDBA74',
+      isLive: false,
+      ageSeconds,
+      warning: 'GPS data is stale (>2m old). Distance-based decision trust is reduced. Dispatcher verification required.',
+      subtext: `Stale Telematics (${Math.floor(ageSeconds / 60)}m ${ageSeconds % 60}s old)`
+    };
+  }
+  if (norm === 'last_known' || ageSeconds > 60) {
+    return {
+      status: 'LAST_KNOWN',
+      label: 'Last Known',
+      icon: '⏱️',
+      color: '#D97706',
+      bg: '#FFFBEB',
+      border: '#FDE68A',
+      isLive: false,
+      ageSeconds,
+      warning: null,
+      subtext: `Last Known (${ageSeconds}s ago)`
+    };
+  }
+  return {
+    status: 'LIVE',
+    label: 'Live Fix',
+    icon: '🛰️',
+    color: '#10B981',
+    bg: '#ECFDF5',
+    border: '#A7F3D0',
+    isLive: true,
+    ageSeconds,
+    warning: null,
+    subtext: 'Live Telematics Lock'
+  };
 }
 
 function renderBusDetailSlideout(bus, state) {
@@ -70,17 +135,17 @@ function renderBusDetailSlideout(bus, state) {
           <div style="background: ${gps.bg}; border: 1px solid ${gps.border}; border-radius: 10px; padding: 14px;">
             <div style="font-size: 0.68rem; font-weight: 700; color: #64748B; text-transform: uppercase; margin-bottom: 4px;">GPS Signal</div>
             <div style="font-size: 0.95rem; font-weight: 800; color: ${gps.color};">${gps.icon} ${gps.label}</div>
-            <div style="font-size: 0.68rem; color: #64748B; margin-top: 2px;">${gps.isLive ? 'Live Stream' : 'Not Live (Last Known)'}</div>
+            <div style="font-size: 0.68rem; color: #64748B; margin-top: 2px;">${gps.subtext}</div>
           </div>
         </div>
 
         <!-- GPS Fallback & Location Details -->
-        <div style="background: ${gps.isLive ? '#F8FAFC' : '#FEF2F2'}; border: 1px solid ${gps.isLive ? '#E2E8F0' : '#FECACA'}; border-radius: 10px; padding: 16px;">
+        <div style="background: ${gps.isLive ? '#F8FAFC' : (gps.status === 'STALE' ? '#FFF7ED' : (gps.status === 'LAST_KNOWN' ? '#FFFBEB' : '#FEF2F2'))}; border: 1px solid ${gps.border}; border-radius: 10px; padding: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <div style="font-size: 0.7rem; font-weight: 700; color: ${gps.isLive ? '#64748B' : '#DC2626'}; text-transform: uppercase;">
-              ${gps.isLive ? 'Simulated Fleet GPS' : '⚠️ Signal Lost — Last Known Location'}
+            <div style="font-size: 0.7rem; font-weight: 700; color: ${gps.isLive ? '#64748B' : gps.color}; text-transform: uppercase;">
+              ${gps.isLive ? 'Live Fleet GPS Telematics' : `⚠️ ${gps.label} — Data Age: ${gps.ageSeconds}s`}
             </div>
-            <span style="font-size: 0.68rem; font-weight: 700; color: ${gps.color}; background: ${gps.bg}; padding: 2px 6px; border-radius: 4px;">
+            <span style="font-size: 0.68rem; font-weight: 700; color: ${gps.color}; background: ${gps.bg}; padding: 2px 6px; border-radius: 4px; border: 1px solid ${gps.border};">
               ${gps.label}
             </span>
           </div>
@@ -88,19 +153,40 @@ function renderBusDetailSlideout(bus, state) {
             ${bus.lastKnownLocation || 'Route Coordinates'}
           </div>
           <div style="font-family: var(--font-mono); font-size: 0.78rem; color: #64748B; margin-bottom: 4px;">
-            Coordinates: [${bus.coords[0].toFixed(5)}, ${bus.coords[1].toFixed(5)}]
+            Coordinates: [${(bus.latitude || bus.coords[0]).toFixed(5)}, ${(bus.longitude || bus.coords[1]).toFixed(5)}]
           </div>
-          <div style="font-size: 0.72rem; color: #94A3B8; margin-bottom: 12px;">
+          <div style="font-size: 0.72rem; color: #334155; margin-bottom: 3px;">
+            📡 Source: <b>${bus.source || (gps.isLive ? 'mock_telematics' : 'last_known')}</b> · Freshness: <b>${gps.ageSeconds}s old</b> (${gps.isLive ? 'Fresh' : 'Degraded'})
+          </div>
+          <div style="font-size: 0.72rem; color: #64748B; margin-bottom: 8px;">
             ⏱ Fleet Sync: ${bus.lastGpsSync || 'N/A'}
           </div>
+          <div style="background: #F1F5F9; border-radius: 6px; padding: 6px 10px; font-size: 0.68rem; color: #475569; margin-bottom: 10px; line-height: 1.35;">
+            <b>Integration Layer:</b> Simulated MVP Telematics (No physical bus GPS hardware attached).
+          </div>
 
-          <button onclick="window.__manualLocationOverride('${bus.id}')" style="
-            width: 100%; padding: 8px 12px; background: #fff; color: #2563EB;
-            border: 1.5px solid #BFDBFE; border-radius: 8px; font-size: 0.82rem;
-            font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
-          ">
-            📍 Dispatcher Manual Location Update
-          </button>
+          ${gps.warning ? `
+            <div style="margin-bottom: 12px; padding: 8px 12px; background: #FFF; border: 1px solid ${gps.border}; border-left: 3px solid ${gps.color}; border-radius: 6px; font-size: 0.76rem; color: ${gps.color}; font-weight: 700;">
+              ⚠️ ${gps.warning}
+            </div>
+          ` : ''}
+
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <button onclick="window.__manualLocationOverride('${bus.id}')" style="
+              width: 100%; padding: 7px 12px; background: #fff; color: #2563EB;
+              border: 1.5px solid #BFDBFE; border-radius: 8px; font-size: 0.78rem;
+              font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+            ">
+              📍 Dispatcher Manual Location Checkpoint
+            </button>
+            <button onclick="window.__sendGpsPing('${bus.id}')" style="
+              width: 100%; padding: 7px 12px; background: #ECFDF5; color: #059669;
+              border: 1px solid #A7F3D0; border-radius: 8px; font-size: 0.78rem;
+              font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+            " title="Simulate incoming GPS telematics update via POST /api/gps/update">
+              🛰️ Ingest Fresh GPS Ping (REST API)
+            </button>
+          </div>
         </div>
 
         <!-- Capacity Bar -->
@@ -141,7 +227,7 @@ function renderBusDetailSlideout(bus, state) {
             <div style="font-size: 0.78rem; color: #64748B; margin-bottom: 6px;">→ ${route.schoolName}</div>
             <div style="display: flex; gap: 12px; font-size: 0.75rem;">
               <span style="color: #10B981; font-weight: 700;">ETA: ${route.currentEta}</span>
-              <span style="color: #64748B;">${route.completedStops}/${route.totalStops} stops done</span>
+              <span style="color: #64748B;">${Array.isArray(route.completedStops) ? route.completedStops.length : (route.completedStops || 0)}/${route.totalStops} stops done</span>
             </div>
           ` : '<span style="color: #94A3B8; font-style: italic;">No active route</span>'}
         </div>
@@ -351,10 +437,18 @@ export function renderBusesView() {
                     </div>
                   </td>
                   <td>
-                    <span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; background: ${gps.bg}; color: ${gps.color}; border: 1px solid ${gps.border};">
-                      ${gps.icon} ${gps.label}
-                    </span>
-                    ${!gps.isLive ? `<div style="font-size: 0.65rem; color: #EF4444; font-weight: 600; margin-top: 2px;">(Not Live)</div>` : ''}
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                      <span style="display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; background: ${gps.bg}; color: ${gps.color}; border: 1px solid ${gps.border}; width: fit-content;">
+                        ${gps.icon} ${gps.label}
+                      </span>
+                      <div style="font-size: 0.68rem; color: #475569; font-weight: 600;">
+                        Freshness: ${gps.ageSeconds}s
+                      </div>
+                      <div style="font-size: 0.65rem; color: #64748B;">
+                        Src: ${bus.source || (gps.isLive ? 'mock_telematics' : 'last_known')}
+                      </div>
+                      ${!gps.isLive ? `<div style="font-size: 0.64rem; color: #EF4444; font-weight: 700;">(Not Live)</div>` : ''}
+                    </div>
                   </td>
                   <td>
                     <span style="display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 9999px; font-size: 0.72rem; font-weight: 700; background: ${opStatus.bg}; color: ${opStatus.color}; border: 1px solid ${opStatus.border};">
@@ -489,4 +583,27 @@ export function renderBusesView() {
   }, 50);
 
   return container;
+}
+
+if (typeof window !== 'undefined') {
+  window.__sendGpsPing = async (busId) => {
+    const state = store.getState();
+    const bus = state.buses.find(b => b.id === busId);
+    if (!bus) return;
+    const jitterLat = (Math.random() - 0.5) * 0.001;
+    const jitterLon = (Math.random() - 0.5) * 0.001;
+    const newCoords = [
+      parseFloat(((bus.coords ? bus.coords[0] : 37.77) + jitterLat).toFixed(5)),
+      parseFloat(((bus.coords ? bus.coords[1] : -122.42) + jitterLon).toFixed(5))
+    ];
+    await store.sendGpsUpdate({
+      busId: bus.id,
+      latitude: newCoords[0],
+      longitude: newCoords[1],
+      timestamp: new Date().toISOString(),
+      source: 'rest_api',
+      locationName: `${bus.lastKnownLocation ? bus.lastKnownLocation.split('(')[0].trim() : 'En Route'} (REST Ingest)`
+    });
+    store.showToast(`GPS update ingested for ${bus.id} via /api/gps/update [${newCoords.join(', ')}]`, 'success');
+  };
 }

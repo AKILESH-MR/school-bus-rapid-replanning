@@ -147,6 +147,8 @@ function renderToasts(container, toasts) {
 
 // Initial mount & subscription
 store.subscribe(renderApp);
+
+store.fetchInitialData();
 renderApp();
 
 // Live clock tick

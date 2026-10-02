@@ -2,6 +2,10 @@
 
 This document outlines the core assumptions made by the rapid replanning system, categorized by stakeholder roles and specific operational domains. These assumptions directly reflect the current implemented logic and constraints of the system.
 
+> [!IMPORTANT]
+> ### Implementation Scope Notice
+> Assumptions below describe the **client-side MVP Single Page Application**. The system operates locally in the browser runtime using in-memory state and browser `localStorage`. No live cloud backend, remote REST API, external message broker, cellular OBD-II GPS stream, or production database is connected. Future enterprise production capabilities are deferred to post-MVP roadmap phases.
+
 ## Stakeholder Roles
 
 ### Dispatcher

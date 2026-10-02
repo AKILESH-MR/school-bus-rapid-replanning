@@ -69,7 +69,7 @@ export function renderRoleSelectionView() {
               ${Icons.check(16, '#10B981')} Track average incident recovery time (SLA)
             </li>
             <li class="role-feature-item">
-              ${Icons.check(16, '#10B981')} Safety constraint validation & equity oversight
+              ${Icons.check(16, '#10B981')} Deterministic safety & ADA constraint validation
             </li>
             <li class="role-feature-item">
               ${Icons.check(16, '#10B981')} Performance metrics, carbon savings & audit logs

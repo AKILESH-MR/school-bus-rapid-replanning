@@ -7,11 +7,17 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node tests/replanningEdgeCases.test.js && node tests/evaluation.test.js"
+    "server": "node server/server.js",
+    "db:migrate": "node server/pg/cli.js migrate",
+    "db:seed": "node server/pg/cli.js seed",
+    "db:status": "node server/pg/cli.js status",
+    "test": "node tests/greedyReplanningEngine.test.js && node tests/storeAndForwardGps.test.js && node tests/replanningEdgeCases.test.js && node tests/evaluation.test.js && node tests/routeProgressAndDriverLocation.test.js && node tests/modifyPlanWorkflow.test.js && node tests/explanationAndAudit.test.js && node tests/insertionPositionConsistency.test.js && node tests/cancellationApprovalWorkflow.test.js && node tests/gpsFreshnessScoring.test.js && node tests/gpsIntegrationLayer.test.js && node tests/backendApi.test.js && node tests/postgresDatabase.test.js"
   },
   "dependencies": {
+    "dotenv": "^18.0.4",
     "leaflet": "^1.9.4",
-    "lucide": "^0.475.0"
+    "lucide": "^0.475.0",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "vite": "^6.1.0"

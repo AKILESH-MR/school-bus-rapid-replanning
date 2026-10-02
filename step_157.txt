@@ -1,0 +1,54 @@
+Created At: 2026-09-29T15:24:26+05:30
+Completed At: 2026-09-29T15:24:26+05:30
+File Path: `file:///d:/project/raale%20project1/src/state/store.js`
+Total Lines: 1432
+Total Bytes: 57337
+Showing lines 15 to 60
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+15:   constructor() {
+16:     // Load pending offline changes from localStorage if any
+17:     const savedPending = this.loadPendingOfflineChanges();
+18: 
+19:     this.state = {
+20:       // Navigation & Flow State
+21:       activeScreen: 'auth', // 'auth' -> 'role_selection' -> 'app'
+22:       currentUser: null,
+23:       currentRole: null, // 'dispatcher' | 'operations_manager'
+24:       activeTab: 'dashboard', // 'dashboard', 'buses', 'routes', 'students', 'disruptions', 'replanning', 'reports', 'settings'
+25: 
+26:       // Network & System Resilience State
+27:       networkStatus: 'online', // 'online' | 'degraded' | 'offline'
+28:       pendingOfflineChanges: savedPending,
+29:       lastSyncTimestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+30: 
+31:       // Domain Entities (Deep cloned for state isolation)
+32:       buses: JSON.parse(JSON.stringify(BUSES)),
+33:       routes: JSON.parse(JSON.stringify(ROUTES)),
+34:       students: JSON.parse(JSON.stringify(STUDENTS)),
+35:       disruptions: JSON.parse(JSON.stringify(DISRUPTIONS)),
+36:       drivers: JSON.parse(JSON.stringify(DRIVERS)),
+37:       schools: JSON.parse(JSON.stringify(SCHOOLS)),
+38:       depot: JSON.parse(JSON.stringify(DEPOT)),
+39:       metrics: JSON.parse(JSON.stringify(OPERATIONS_METRICS)),
+40: 
+41:       // Interaction State
+42:       selectedBusId: null,
+43:       selectedRouteId: null,
+44:       selectedDisruptionId: "DIS-2026-001", // Default active critical disruption
+45:       searchQuery: "",
+46:       filterStatus: "all",
+47: 
+48:       // Modals
+49:       activeModal: null, // 'create_disruption' | 'add_student' | 'bus_detail' | 'manual_location' | null
+50:       modalPayload: null,
+51: 
+52:       // Toast notifications
+53:       toasts: []
+54:     };
+55: 
+56:     this.listeners = new Set();
+57: 
+58:     // Hook browser online / offline network events
+59:     if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+60:       window.addEventListener('online', () => {
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

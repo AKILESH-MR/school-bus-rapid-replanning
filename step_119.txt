@@ -1,0 +1,129 @@
+Created At: 2026-09-29T15:20:37+05:30
+Completed At: 2026-09-29T15:20:37+05:30
+File Path: `file:///d:/project/raale%20project1/src/state/store.js`
+Total Lines: 1432
+Total Bytes: 57337
+Showing lines 800 to 920
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+800:       });
+801:     }
+802: 
+803:     this.showToast(`New Disruption Logged: ${disruptionData.title}`, 'danger');
+804:     this.closeModal();
+805:     this.setActiveTab('replanning');
+806:     this.notify();
+807:   }
+808: 
+809:   // 1-8. Algorithmic Evaluation for Urgent Student Addition
+810:   evaluateUrgentStudentAddition(studentData) {
+811:     const evaluations = [];
+812: 
+813:     for (const bus of this.state.buses) {
+814:       const route = this.state.routes.find(r => r.id === bus.routeId);
+815:       const driver = this.state.drivers.find(d => d.id === bus.driverId);
+816:       const destinationSchool = this.state.schools.find(s => s.id === (route ? route.schoolId : studentData.schoolId));
+817:       const reasons = [];
+818: 
+819:       // 1. Check vehicle operational status
+820:       if (['breakdown', 'offline', 'maintenance'].includes(bus.status)) {
+821:         reasons.push(`Vehicle unavailable (${bus.status})`);
+822:       }
+823: 
+824:       // 2. Check available seats
+825:       const seatsAvailable = bus.capacity - (bus.currentLoad || 0);
+826:       if (seatsAvailable <= 0) {
+827:         reasons.push(`Insufficient capacity (${bus.currentLoad}/${bus.capacity} full, 0 seats available)`);
+828:       }
+829: 
+830:       // 3. Check driver availability, current assignment, and existing commitments
+831:       const driverCheck = this.validateDriverAvailabilityAndCommitments(driver, bus, route);
+832:       if (!driverCheck.isValid) {
+833:         reasons.push(driverCheck.reason);
+834:       }
+835: 
+836:       // 4. Check route compatibility (destination school & active service)
+837:       if (!route) {
+838:         reasons.push('Bus has no active route assigned');
+839:       } else if (studentData.schoolId && route.schoolId !== studentData.schoolId) {
+840:         reasons.push(`Route ${route.id} serves ${route.schoolName || route.schoolId}, incompatible with destination (${studentData.schoolName || studentData.schoolId})`);
+841:       }
+842: 
+843:       // 5. Special needs / ADA accessibility compatibility
+844:       if (studentData.specialNeeds && studentData.specialNeeds.toLowerCase().includes('wheelchair')) {
+845:         const hasLift = bus.amenities && bus.amenities.some(a => a.toLowerCase().includes('wheelchair'));
+846:         if (!hasLift) {
+847:           reasons.push('Incompatible: Vehicle lacks required ADA Wheelchair Lift');
+848:         }
+849:       }
+850: 
+851:       // 6 & 7. Estimate additional route delay & driver commitment
+852:       const isWheelchair = studentData.specialNeeds && studentData.specialNeeds.toLowerCase().includes('wheelchair');
+853:       const dwellDelayMins = isWheelchair ? 3.5 : 2.0;
+854:       const detourTransitMins = 1.5;
+855:       const additionalDelayMins = dwellDelayMins + detourTransitMins;
+856: 
+857:       const isFeasible = reasons.length === 0;
+858: 
+859:       const driverLocation = bus.status === 'in_depot' ? [37.7550, -122.4050] : (bus.coords || [37.77, -122.42]);
+860:       const disruptionLocation = studentData.coords || [37.77, -122.42];
+861:       const driverDistanceMi = getDistanceMiles(driverLocation, disruptionLocation);
+862: 
+863:       // Deterministic scoring (prefer available driver without commitment conflicts, and closer proximity)
+864:       const score = isFeasible
+865:         ? (100 - additionalDelayMins * 5 + seatsAvailable * 2 + driverCheck.preferenceScore + (bus.healthScore || 90) * 0.1 - driverDistanceMi * 2)
+866:         : 0;
+867: 
+868:       evaluations.push({
+869:         bus,
+870:         route,
+871:         driver,
+872:         destinationSchool,
+873:         isFeasible,
+874:         reasons,
+875:         seatsAvailable,
+876:         additionalDelayMins,
+877:         driverDistanceMi,
+878:         score
+879:       });
+880:     }
+881: 
+882:     // Filter feasible candidates and sort deterministically by score descending
+883:     const feasibleCandidates = evaluations
+884:       .filter(e => e.isFeasible)
+885:       .sort((a, b) => b.score - a.score);
+886: 
+887:     return {
+888:       feasibleCandidates,
+889:       allEvaluations: evaluations
+890:     };
+891:   }
+892: 
+893:   // 9-10. Urgent Student Addition: evaluate feasibility, recommend best bus, await dispatcher approval
+894:   addStudent(studentData) {
+895:     const { feasibleCandidates, allEvaluations } = this.evaluateUrgentStudentAddition(studentData);
+896:     const bestCandidate = feasibleCandidates[0] || null;
+897: 
+898:     const newId = `STU-${Math.floor(1010 + Math.random() * 8000)}`;
+899:     const now = new Date();
+900:     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+901: 
+902:     // Register student with UNASSIGNED status until approved
+903:     const newStudent = {
+904:       id: newId,
+905:       status: bestCandidate ? 'urgent_added' : 'urgent_no_feasible',
+906:       photo: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=100&auto=format&fit=crop&q=80',
+907:       busId: 'UNASSIGNED',
+908:       routeId: 'UNASSIGNED',
+909:       ...studentData
+910:     };
+911: 
+912:     this.state.students.unshift(newStudent);
+913:     this.state.metrics.totalStudentsToday += 1;
+914: 
+915:     const newDisruptionId = `DIS-2026-00${this.state.disruptions.length + 1}`;
+916: 
+917:     if (!bestCandidate) {
+918:       // IF NO SUITABLE BUS EXISTS
+919:       const failureDisruption = {
+920:         id: newDisruptionId,
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

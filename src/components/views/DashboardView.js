@@ -232,7 +232,8 @@ export function renderDashboardView() {
               const bus = buses.find(b => b.id === r.assignedBus);
               const isDisrupted = r.status === 'disrupted';
               const isDelayed = r.status === 'delayed';
-              const progressPct = Math.round((r.completedStops / r.totalStops) * 100);
+              const completedCount = Array.isArray(r.completedStops) ? r.completedStops.length : (r.completedStops || 0);
+              const progressPct = r.routeProgressPercentage != null ? r.routeProgressPercentage : Math.round((completedCount / r.totalStops) * 100);
 
               return `
                 <tr>
@@ -248,7 +249,7 @@ export function renderDashboardView() {
                       <div style="flex-grow: 1; height: 6px; background: #E2E8F0; border-radius: 9999px; width: 80px; overflow: hidden;">
                         <div style="height: 100%; width: ${progressPct}%; background: ${isDisrupted ? '#EF4444' : '#2563EB'};"></div>
                       </div>
-                      <span style="font-size: 0.72rem; font-weight: 700;">${r.completedStops}/${r.totalStops}</span>
+                      <span style="font-size: 0.72rem; font-weight: 700;">${completedCount}/${r.totalStops}</span>
                     </div>
                   </td>
                   <td>

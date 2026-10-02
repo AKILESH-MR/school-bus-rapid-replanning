@@ -1,0 +1,59 @@
+Created At: 2026-09-29T15:25:00+05:30
+Completed At: 2026-09-29T15:25:01+05:30
+File Path: `file:///d:/project/raale%20project1/src/state/store.js`
+Total Lines: 1432
+Total Bytes: 57337
+Showing lines 980 to 1030
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+980: 
+981:     const newDisruption = {
+982:       id: newDisruptionId,
+983:       _createdAtMs: Date.now(),
+984:       reportedAt: timeStr,
+985:       type: 'urgent_add',
+986:       title: `Urgent Student Addition – ${studentData.name}`,
+987:       studentId: newId,
+988:       studentName: studentData.name,
+989:       busId: bestCandidate.bus.id,
+990:       routeId: bestCandidate.route.id,
+991:       location: studentData.stopName,
+992:       severity: 'warning',
+993:       impact: `Urgent passenger request. Recommended Bus ${bestCandidate.bus.id} (${bestCandidate.seatsAvailable} seats available, +${bestCandidate.additionalDelayMins} min variance).`,
+994:       status: 'unresolved',
+995:       beforeRoute,
+996:       afterRoute,
+997:       beforeBus: {
+998:         id: bestCandidate.bus.id,
+999:         load: beforeBus.currentLoad,
+1000:         capacity: beforeBus.capacity,
+1001:         availableSeats: bestCandidate.seatsAvailable
+1002:       },
+1003:       afterBus: {
+1004:         id: bestCandidate.bus.id,
+1005:         load: afterBus.currentLoad,
+1006:         capacity: afterBus.capacity,
+1007:         availableSeats: bestCandidate.seatsAvailable - 1
+1008:       },
+1009:       aiRecommendationAvailable: true,
+1010:       aiRecommendation: {
+1011:         planId: `REPLAN-ADD-${Math.floor(100 + Math.random() * 900)}`,
+1012:         strategy: 'Dynamic Stop Insertion & Route Capacity Allocation',
+1013:         recommendedBusId: bestCandidate.bus.id,
+1014:         recommendedRouteId: bestCandidate.route.id,
+1015:         availableSeats: `${bestCandidate.seatsAvailable} seats available (${afterBus.currentLoad}/${bestCandidate.bus.capacity} load)`,
+1016:         currentLocation: bestCandidate.bus.status === 'in_depot' ? 'Central Depot' : (bestCandidate.route?.stops?.find(s => s.status === 'next')?.name || 'In Transit'),
+1017:         driverAvailability: `${bestCandidate.driver.name} (Available - ${bestCandidate.driver.status === 'standby' ? 'Standby' : 'Active'}, No commitment conflicts)`,
+1018:         routeCompatibility: `Compatible (Serves ${studentData.schoolName || 'destination school'}, ADA Compliant)`,
+1019:         estimatedAdditionalDelay: `+${bestCandidate.additionalDelayMins} min (Arrives before school bell)`,
+1020:         selectionReason: reasonExplanation,
+1021:         recommendedDriver: bestCandidate.driver.name,
+1022:         estRecoveryTimeMins: 0,
+1023:         additionalDelayMins: bestCandidate.additionalDelayMins,
+1024:         newEtaDifference: `+${bestCandidate.additionalDelayMins} min`,
+1025:         explanation: reasonExplanation,
+1026:         candidateEvaluations: allEvaluations.map(e => ({
+1027:           busId: e.bus.id,
+1028:           model: e.bus.model,
+1029:           routeId: e.route ? e.route.id : 'None',
+1030:           driverName: e.driver ? e.driver.name : 'Unassigned',
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

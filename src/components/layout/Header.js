@@ -59,18 +59,19 @@ export function renderHeader() {
         </select>
       </div>
 
-      <!-- Pending Offline Synchronization Badge -->
-      ${pendingCount > 0 ? `
-        <button id="header-sync-now-btn" style="
-          display: flex; align-items: center; gap: 6px;
-          background: #FEF3C7; border: 1px solid #F59E0B; color: #92400E;
-          font-size: 0.75rem; font-weight: 700; padding: 5px 10px; border-radius: 9999px;
-          cursor: pointer; transition: all 0.2s ease;
-        " title="Synchronize pending local offline changes with district cloud">
-          <span>⚡ ${pendingCount} Pending Local ${pendingCount === 1 ? 'Change' : 'Changes'}</span>
-          <span style="background: #F59E0B; color: #fff; padding: 1px 6px; border-radius: 6px; font-size: 0.68rem;">Sync Now</span>
-        </button>
-      ` : ''}
+      <!-- GPS Layer Status Widget -->
+      <div class="gps-status-control" style="
+        display: flex; align-items: center; gap: 6px;
+        background: #F0F9FF; border: 1px solid #BAE6FD;
+        padding: 5px 10px; border-radius: 9999px;
+      " title="GPS Integration Layer: Simulated Telematics (MVP demonstration environment — no real physical bus tracking devices connected)">
+        <span style="font-size: 0.72rem; font-weight: 800; color: #0284C7; display: flex; align-items: center; gap: 4px;">
+          🛰️ GPS:
+        </span>
+        <span style="font-size: 0.72rem; font-weight: 700; color: #0369A1; background: #E0F2FE; padding: 1px 7px; border-radius: 9999px;">
+          Simulated Layer
+        </span>
+      </div>
 
       <!-- Live Clock -->
       <div class="header-time-widget">
@@ -109,6 +110,32 @@ export function renderHeader() {
         `}
       </div>
     </div>
+
+    <!-- Visible Network Status & Store-and-Forward Banner -->
+    ${netStatus === 'offline' ? `
+      <div style="grid-column: 1 / -1; width: 100%; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 10px 16px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem; color: #991B1B;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-weight: 800; background: #EF4444; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">OFFLINE</span>
+          <span>Offline mode active. Actions will be stored locally and synchronized when connectivity returns.</span>
+          <span style="background: #FEE2E2; border: 1px solid #FCA5A5; font-weight: 700; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem;">Pending Sync: ${pendingCount}</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="banner-view-pending-btn" class="action-btn secondary" style="padding: 4px 10px; font-size: 0.75rem;">View Pending Actions</button>
+          <button id="banner-retry-sync-btn" class="action-btn warning" style="padding: 4px 10px; font-size: 0.75rem;">Retry Sync</button>
+        </div>
+      </div>
+    ` : (pendingCount > 0 ? `
+      <div style="grid-column: 1 / -1; width: 100%; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 8px; padding: 10px 16px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem; color: #92400E;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-weight: 800; background: #F59E0B; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">RESTORED</span>
+          <span>Network restored. <b>${pendingCount}</b> pending action(s) ready for synchronization.</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="banner-sync-now-btn" class="action-btn primary" style="padding: 4px 12px; font-size: 0.75rem;">Sync Now</button>
+          <button id="banner-view-pending-btn" class="action-btn secondary" style="padding: 4px 10px; font-size: 0.75rem;">View Pending Actions</button>
+        </div>
+      </div>
+    ` : '')}
   `;
 
   // Attach event listeners
@@ -119,10 +146,24 @@ export function renderHeader() {
     });
   }
 
-  const syncBtn = header.querySelector('#header-sync-now-btn');
-  if (syncBtn) {
-    syncBtn.addEventListener('click', () => {
+  const bannerSyncBtn = header.querySelector('#banner-sync-now-btn');
+  if (bannerSyncBtn) {
+    bannerSyncBtn.addEventListener('click', () => {
       store.syncPendingOfflineChanges();
+    });
+  }
+
+  const bannerViewPendingBtn = header.querySelector('#banner-view-pending-btn');
+  if (bannerViewPendingBtn) {
+    bannerViewPendingBtn.addEventListener('click', () => {
+      store.openModal('pending_actions');
+    });
+  }
+
+  const bannerRetrySyncBtn = header.querySelector('#banner-retry-sync-btn');
+  if (bannerRetrySyncBtn) {
+    bannerRetrySyncBtn.addEventListener('click', () => {
+      store.retryFailedActions();
     });
   }
 

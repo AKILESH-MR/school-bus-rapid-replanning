@@ -1,0 +1,54 @@
+Created At: 2026-09-29T15:24:50+05:30
+Completed At: 2026-09-29T15:24:51+05:30
+File Path: `file:///d:/project/raale%20project1/src/state/store.js`
+Total Lines: 1432
+Total Bytes: 57337
+Showing lines 930 to 975
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+930:         severity: 'warning',
+931:         impact: 'No suitable bus exists matching capacity, driver, and destination school requirements.',
+932:         status: 'unresolved',
+933:         aiRecommendationAvailable: false,
+934:         noFeasibleSolution: true,
+935:         candidateEvaluations: allEvaluations.map(e => ({
+936:           busId: e.bus.id,
+937:           model: e.bus.model,
+938:           routeId: e.route ? e.route.id : 'None',
+939:           driverName: e.driver ? e.driver.name : 'Unassigned',
+940:           location: e.bus.status === 'in_depot' ? 'Central Depot' : (e.route?.stops?.find(s => s.status === 'next')?.name || 'In Transit'),
+941:           seatsAvailable: e.seatsAvailable,
+942:           delayMins: e.additionalDelayMins,
+943:           isFeasible: false,
+944:           statusText: e.reasons.join('; ')
+945:         }))
+946:       };
+947: 
+948:       this.state.disruptions.unshift(failureDisruption);
+949:       this.state.selectedDisruptionId = newDisruptionId;
+950:       this.state.metrics.activeDisruptionsCount += 1;
+951: 
+952:       this.showToast('No Feasible Solution — Manual Intervention Required', 'warning');
+953:       this.closeModal();
+954:       this.setActiveTab('replanning');
+955:       this.notify();
+956:       return;
+957:     }
+958: 
+959:     // FEASIBLE CANDIDATE FOUND
+960:     const beforeRoute = JSON.parse(JSON.stringify(bestCandidate.route));
+961:     const afterRoute = JSON.parse(JSON.stringify(bestCandidate.route));
+962: 
+963:     // Simulated stop insertion on afterRoute
+964:     afterRoute.stops.splice(Math.max(0, afterRoute.stops.length - 1), 0, {
+965:       id: `ST-${bestCandidate.route.id}-URGENT`,
+966:       name: studentData.stopName,
+967:       time: "07:45 AM",
+968:       studentsCount: 1,
+969:       status: "pending"
+970:     });
+971:     afterRoute.totalStops = afterRoute.stops.length;
+972: 
+973:     const beforeBus = JSON.parse(JSON.stringify(bestCandidate.bus));
+974:     const afterBus = JSON.parse(JSON.stringify(bestCandidate.bus));
+975:     afterBus.currentLoad = (afterBus.currentLoad || 0) + 1;
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

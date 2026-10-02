@@ -1,0 +1,54 @@
+Created At: 2026-09-29T15:24:43+05:30
+Completed At: 2026-09-29T15:24:44+05:30
+File Path: `file:///d:/project/raale%20project1/src/state/store.js`
+Total Lines: 1432
+Total Bytes: 57337
+Showing lines 845 to 890
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+845:         const hasLift = bus.amenities && bus.amenities.some(a => a.toLowerCase().includes('wheelchair'));
+846:         if (!hasLift) {
+847:           reasons.push('Incompatible: Vehicle lacks required ADA Wheelchair Lift');
+848:         }
+849:       }
+850: 
+851:       // 6 & 7. Estimate additional route delay & driver commitment
+852:       const isWheelchair = studentData.specialNeeds && studentData.specialNeeds.toLowerCase().includes('wheelchair');
+853:       const dwellDelayMins = isWheelchair ? 3.5 : 2.0;
+854:       const detourTransitMins = 1.5;
+855:       const additionalDelayMins = dwellDelayMins + detourTransitMins;
+856: 
+857:       const isFeasible = reasons.length === 0;
+858: 
+859:       const driverLocation = bus.status === 'in_depot' ? [37.7550, -122.4050] : (bus.coords || [37.77, -122.42]);
+860:       const disruptionLocation = studentData.coords || [37.77, -122.42];
+861:       const driverDistanceMi = getDistanceMiles(driverLocation, disruptionLocation);
+862: 
+863:       // Deterministic scoring (prefer available driver without commitment conflicts, and closer proximity)
+864:       const score = isFeasible
+865:         ? (100 - additionalDelayMins * 5 + seatsAvailable * 2 + driverCheck.preferenceScore + (bus.healthScore || 90) * 0.1 - driverDistanceMi * 2)
+866:         : 0;
+867: 
+868:       evaluations.push({
+869:         bus,
+870:         route,
+871:         driver,
+872:         destinationSchool,
+873:         isFeasible,
+874:         reasons,
+875:         seatsAvailable,
+876:         additionalDelayMins,
+877:         driverDistanceMi,
+878:         score
+879:       });
+880:     }
+881: 
+882:     // Filter feasible candidates and sort deterministically by score descending
+883:     const feasibleCandidates = evaluations
+884:       .filter(e => e.isFeasible)
+885:       .sort((a, b) => b.score - a.score);
+886: 
+887:     return {
+888:       feasibleCandidates,
+889:       allEvaluations: evaluations
+890:     };
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

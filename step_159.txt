@@ -1,0 +1,79 @@
+Created At: 2026-09-29T15:24:33+05:30
+Completed At: 2026-09-29T15:24:33+05:30
+File Path: `file:///d:/project/raale%20project1/src/state/store.js`
+Total Lines: 1432
+Total Bytes: 57337
+Showing lines 390 to 460
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+390:   // Driver Availability & Commitment Validation Engine for Replanning
+391:   validateDriverAvailabilityAndCommitments(driver, bus, targetRoute = null) {
+392:     // 1 & 5. Check whether driver exists and is available
+393:     if (!driver) {
+394:       return {
+395:         isValid: false,
+396:         reason: "Driver unavailable",
+397:         preferenceScore: 0
+398:       };
+399:     }
+400: 
+401:     if (driver.status === 'sick') {
+402:       return {
+403:         isValid: false,
+404:         reason: "Driver unavailable (Medical / Sickness absence)",
+405:         preferenceScore: 0
+406:       };
+407:     }
+408: 
+409:     if (driver.status === 'on_break' || driver.status === 'offline') {
+410:       return {
+411:         isValid: false,
+412:         reason: "Driver unavailable (Off-duty / Mandatory rest)",
+413:         preferenceScore: 0
+414:       };
+415:     }
+416: 
+417:     if (driver.status !== 'active' && driver.status !== 'standby') {
+418:       return {
+419:         isValid: false,
+420:         reason: "Driver unavailable",
+421:         preferenceScore: 0
+422:       };
+423:     }
+424: 
+425:     // 2 & 4. Check the driver's current assignment and route conflicts
+426:     if (targetRoute) {
+427:       const conflictingRoute = this.state.routes.find(r =>
+428:         r.id !== targetRoute.id &&
+429:         (r.assignedDriver === driver.name || (bus && bus.routeId && bus.routeId === r.id && r.id !== targetRoute.id))
+430:       );
+431:       if (conflictingRoute) {
+432:         return {
+433:           isValid: false,
+434:           reason: `Driver already assigned to another route (${conflictingRoute.id})`,
+435:           preferenceScore: 0
+436:         };
+437:       }
+438:     }
+439: 
+440:     // 3. Check existing commitments
+441:     if (driver.commitments && driver.commitments.length > 0) {
+442:       return {
+443:         isValid: false,
+444:         reason: "Driver has an existing commitment",
+445:         preferenceScore: 0
+446:       };
+447:     }
+448: 
+449:     // 6. Prefer candidates with an available driver and no commitment conflict
+450:     const preferenceScore = driver.status === 'standby' ? 25 : 15;
+451: 
+452:     return {
+453:       isValid: true,
+454:       reason: null,
+455:       preferenceScore
+456:     };
+457:   }
+458: 
+459:   // 1-10. Vehicle Unavailable / Bus Breakdown Rapid Replanning Engine
+460:   handleVehicleBreakdown(busId, incidentDetails = {}) {
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

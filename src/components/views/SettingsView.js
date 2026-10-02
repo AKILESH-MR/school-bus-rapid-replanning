@@ -11,7 +11,7 @@ export function renderSettingsView() {
       <div class="panel-header">
         <div class="panel-title-area">
           <h2>System & Responsible AI Configurations</h2>
-          <p>Control dispatch optimization weights, fairness constraints, and notification gateways</p>
+          <p>Control dispatch optimization weights, deterministic constraints, and notification gateways</p>
         </div>
         <button class="action-btn primary" id="save-settings-btn">
           ${Icons.check(16, '#fff')} Save Preferences
@@ -48,10 +48,10 @@ export function renderSettingsView() {
             </div>
 
             <div class="form-group">
-              <label class="form-label">Fairness & Equity Weight Factor</label>
+              <label class="form-label">Route Disruption Weight Factor</label>
               <select class="form-select">
-                <option value="0.95" selected>High (95% - Balance delays across all stops)</option>
-                <option value="0.80">Medium (80% - Prioritize total fuel reduction)</option>
+                <option value="0.5" selected>Standard (0.5 - Minimize existing passenger disruption)</option>
+                <option value="1.0">Elevated (1.0 - Strict minimization of detour delay)</option>
               </select>
             </div>
 
