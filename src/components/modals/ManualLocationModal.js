@@ -157,20 +157,41 @@ export function renderManualLocationModal() {
   });
 
   // Handle form submit
+  const saveBtn = backdrop.querySelector('#save-manual-location-btn');
+  let isSaving = false;
+
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (isSaving) return;
+
     const busId = busSelect.value;
     const lat = parseFloat(latInput.value);
     const lng = parseFloat(lngInput.value);
     const locName = locNameInput.value.trim();
     const reason = backdrop.querySelector('#manual-reason')?.value.trim() || 'Dispatcher Manual Checkpoint';
 
-    if (isNaN(lat) || isNaN(lng)) {
-      store.showToast('Please enter valid numerical latitude and longitude coordinates.', 'danger');
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      store.showToast('Please enter valid numerical coordinates (Lat -90 to 90, Lng -180 to 180).', 'danger');
       return;
     }
 
-    store.updateBusLocationManually(busId, [lat, lng], locName, reason);
+    isSaving = true;
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = `${Icons.mapPin(16, '#fff')} Confirming Location...`;
+    }
+
+    try {
+      store.updateBusLocationManually(busId, [lat, lng], locName, reason);
+    } catch (err) {
+      console.warn('Manual location update error:', err);
+      store.showToast('Unable to update location. Please retry.', 'danger');
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = `${Icons.mapPin(16, '#fff')} Confirm Manual Location`;
+      }
+      isSaving = false;
+    }
   });
 
   const close = () => store.closeModal();

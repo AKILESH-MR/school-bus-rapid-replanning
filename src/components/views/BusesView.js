@@ -27,8 +27,8 @@ function gpsStatus(bus) {
       border: '#BFDBFE',
       isLive: false,
       ageSeconds,
-      warning: null,
-      subtext: 'Dispatcher Verified Fix'
+      warning: 'Manual location override active. Reduced distance confidence compared to live telematics; verification recommended.',
+      subtext: 'Dispatcher Verified Fix (Reduced Confidence)'
     };
   }
   if (norm === 'no_signal' || bus.status === 'breakdown' || bus.status === 'maintenance') {
@@ -41,8 +41,8 @@ function gpsStatus(bus) {
       border: '#FECACA',
       isLive: false,
       ageSeconds,
-      warning: 'Telematics signal lost. Using last-known location only. Manual dispatcher checkpoint override available.',
-      subtext: 'Signal Lost — Not Live'
+      warning: 'Telematics signal lost. Zero distance confidence. Dispatcher verification required or enter manual GPS checkpoint.',
+      subtext: 'Signal Lost — Verification Required'
     };
   }
   if (norm === 'stale' || ageSeconds > 120) {

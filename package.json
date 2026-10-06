@@ -11,7 +11,7 @@
     "db:migrate": "node server/pg/cli.js migrate",
     "db:seed": "node server/pg/cli.js seed",
     "db:status": "node server/pg/cli.js status",
-    "test": "node tests/greedyReplanningEngine.test.js && node tests/storeAndForwardGps.test.js && node tests/replanningEdgeCases.test.js && node tests/evaluation.test.js && node tests/routeProgressAndDriverLocation.test.js && node tests/modifyPlanWorkflow.test.js && node tests/explanationAndAudit.test.js && node tests/insertionPositionConsistency.test.js && node tests/cancellationApprovalWorkflow.test.js && node tests/gpsFreshnessScoring.test.js && node tests/gpsIntegrationLayer.test.js && node tests/backendApi.test.js && node tests/postgresDatabase.test.js"
+    "test": "node tests/greedyReplanningEngine.test.js && node tests/storeAndForwardGps.test.js && node tests/replanningEdgeCases.test.js && node tests/evaluation.test.js && node tests/routeProgressAndDriverLocation.test.js && node tests/modifyPlanWorkflow.test.js && node tests/explanationAndAudit.test.js && node tests/insertionPositionConsistency.test.js && node tests/cancellationApprovalWorkflow.test.js && node tests/gpsFreshnessScoring.test.js && node tests/gpsIntegrationLayer.test.js && node tests/backendApi.test.js && node tests/postgresDatabase.test.js && node tests/frontendErrorRetry.test.js && node tests/dispatcherE2EWorkflow.test.js"
   },
   "dependencies": {
     "dotenv": "^18.0.4",

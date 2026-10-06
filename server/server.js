@@ -31,6 +31,10 @@ function sendJson(res, statusCode, data) {
   res.end(JSON.stringify(data));
 }
 
+// UNIFORM ERROR RESPONSE HANDLER:
+// Formats all API errors into a standardized, predictable contract:
+// { error: string, statusCode: number, details: array|null, timestamp: ISO string }
+// Ensures frontend clients receive structured machine-readable error context.
 function sendError(res, statusCode, message, details = null) {
   sendJson(res, statusCode, {
     error: message,
@@ -40,6 +44,9 @@ function sendError(res, statusCode, message, details = null) {
   });
 }
 
+// DEFENSIVE BODY PARSING & PAYLOAD BOUNDARY:
+// 1. Memory exhaustion protection: Caps request streams at 2MB to defend against unbounded memory spikes.
+// 2. Format validation: Catches malformed JSON syntax and returns a descriptive error rather than crashing.
 async function parseBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -261,9 +268,17 @@ export function createServer(options = {}) {
         await db.saveReplan(replanRecord);
 
         if (disruption) {
-          disruption.aiRecommendation = replanRecord;
-          disruption.status = 'unresolved';
-          disruption.aiRecommendationAvailable = true;
+          if (replanResult.noFeasibleSolution) {
+            disruption.noFeasibleSolution = true;
+            disruption.aiRecommendationAvailable = false;
+            disruption.aiRecommendation = null;
+            disruption.candidateEvaluations = replanResult.rejectedCandidates;
+          } else {
+            disruption.aiRecommendation = replanRecord;
+            disruption.status = 'unresolved';
+            disruption.aiRecommendationAvailable = true;
+            disruption.noFeasibleSolution = false;
+          }
           await db.saveDisruption(disruption);
 
           await db.saveAuditLog({

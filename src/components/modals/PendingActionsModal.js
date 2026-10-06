@@ -11,12 +11,14 @@ export function renderPendingActionsModal() {
   const syncingCount = queue.filter(q => q.status === 'SYNCING').length;
   const failedCount = queue.filter(q => q.status === 'FAILED').length;
 
+  const isSyncing = state.loadingStates?.sync;
+
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'pending-actions-modal-overlay';
 
   overlay.innerHTML = `
-    <div class="modal-card" style="max-width: 780px; width: 90%;">
+    <div class="modal-card" style="max-width: 820px; width: 92%;">
       <div class="modal-header">
         <div style="display: flex; align-items: center; gap: 10px;">
           <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #0F2747; display: flex; align-items: center; gap: 8px;">
@@ -35,16 +37,16 @@ export function renderPendingActionsModal() {
         </p>
 
         <!-- Status Summary Badges -->
-        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
           <div style="background: #F8FAFC; border: 1px solid #E2E8F0; padding: 8px 14px; border-radius: 8px; font-size: 0.8rem;">
             Total Queued: <b style="color: #0F2747;">${queue.length}</b>
           </div>
           <div style="background: #FEF3C7; border: 1px solid #FDE68A; padding: 8px 14px; border-radius: 8px; font-size: 0.8rem; color: #92400E;">
             Pending: <b>${pendingCount}</b>
           </div>
-          ${syncingCount > 0 ? `
+          ${syncingCount > 0 || isSyncing ? `
             <div style="background: #EFF6FF; border: 1px solid #BFDBFE; padding: 8px 14px; border-radius: 8px; font-size: 0.8rem; color: #1D4ED8;">
-              Syncing: <b>${syncingCount}</b>
+              Syncing: <b>${syncingCount || (isSyncing ? pendingCount : 0)}</b>
             </div>
           ` : ''}
           ${failedCount > 0 ? `
@@ -53,6 +55,12 @@ export function renderPendingActionsModal() {
             </div>
           ` : ''}
         </div>
+
+        ${state.lastSyncResult ? `
+          <div style="margin-bottom: 14px; padding: 8px 12px; background: ${state.lastSyncResult.success ? '#ECFDF5' : '#FEF2F2'}; border: 1px solid ${state.lastSyncResult.success ? '#A7F3D0' : '#FECACA'}; border-radius: 6px; font-size: 0.78rem; color: ${state.lastSyncResult.success ? '#065F46' : '#991B1B'};">
+            <b>Last Sync Result:</b> ${state.lastSyncResult.message} (${state.lastSyncResult.timestamp})
+          </div>
+        ` : ''}
 
         <!-- Pending Actions Table -->
         ${queue.length === 0 ? `
@@ -72,6 +80,7 @@ export function renderPendingActionsModal() {
                   <th style="padding: 8px 12px; font-weight: 700; color: #475569;">Timestamp</th>
                   <th style="padding: 8px 12px; font-weight: 700; color: #475569;">Status</th>
                   <th style="padding: 8px 12px; font-weight: 700; color: #475569;">Retries</th>
+                  <th style="padding: 8px 12px; font-weight: 700; color: #475569; text-align: center;">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -100,6 +109,13 @@ export function renderPendingActionsModal() {
                         </span>
                       </td>
                       <td style="padding: 8px 12px; color: #475569; font-weight: 600;">${item.retryCount || 0}</td>
+                      <td style="padding: 8px 12px; text-align: center;">
+                        ${item.status === 'FAILED' ? `
+                          <button class="action-btn warning retry-single-action-btn" data-action-id="${item.actionId || item.id}" style="padding: 3px 8px; font-size: 0.7rem;" ${isSyncing ? 'disabled' : ''}>
+                            Retry
+                          </button>
+                        ` : `<span style="color: #94A3B8;">—</span>`}
+                      </td>
                     </tr>
                   `;
                 }).join('')}
@@ -115,13 +131,13 @@ export function renderPendingActionsModal() {
         </div>
         <div style="display: flex; gap: 8px;">
           ${failedCount > 0 ? `
-            <button class="action-btn warning" id="retry-failed-modal-btn" style="font-size: 0.82rem;">
-              ${Icons.refreshCw(14, 'currentColor')} Retry Failed Actions (${failedCount})
+            <button class="action-btn warning" id="retry-failed-modal-btn" style="font-size: 0.82rem;" ${isSyncing ? 'disabled' : ''}>
+              ${Icons.refreshCw(14, 'currentColor')} ${isSyncing ? 'Synchronizing offline actions...' : `Retry Failed Actions (${failedCount})`}
             </button>
           ` : ''}
           ${isOnline && queue.length > 0 ? `
-            <button class="action-btn primary" id="sync-now-modal-btn" style="font-size: 0.82rem;">
-              ⚡ Sync All Now (${queue.length})
+            <button class="action-btn primary" id="sync-now-modal-btn" style="font-size: 0.82rem;" ${isSyncing ? 'disabled' : ''}>
+              ${isSyncing ? 'Synchronizing offline actions...' : `⚡ Sync All Now (${queue.length})`}
             </button>
           ` : ''}
           <button class="action-btn secondary" id="close-modal-footer-btn" style="font-size: 0.82rem;">Close</button>
@@ -140,6 +156,7 @@ export function renderPendingActionsModal() {
   const syncNowBtn = overlay.querySelector('#sync-now-modal-btn');
   if (syncNowBtn) {
     syncNowBtn.addEventListener('click', () => {
+      if (store.isOperationLoading('sync')) return;
       store.syncPendingOfflineChanges();
     });
   }
@@ -147,9 +164,21 @@ export function renderPendingActionsModal() {
   const retryFailedBtn = overlay.querySelector('#retry-failed-modal-btn');
   if (retryFailedBtn) {
     retryFailedBtn.addEventListener('click', () => {
+      if (store.isOperationLoading('sync')) return;
       store.retryFailedActions();
     });
   }
+
+  const singleRetryBtns = overlay.querySelectorAll('.retry-single-action-btn');
+  singleRetryBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      if (store.isOperationLoading('sync')) return;
+      const aId = e.currentTarget.getAttribute('data-action-id');
+      if (aId) {
+        store.retryAction(aId);
+      }
+    });
+  });
 
   return overlay;
 }

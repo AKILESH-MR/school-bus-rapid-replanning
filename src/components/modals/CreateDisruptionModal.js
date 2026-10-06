@@ -140,33 +140,59 @@ export function renderCreateDisruptionModal() {
   });
 
   const form = backdrop.querySelector('#create-disruption-form');
+  const submitBtn = backdrop.querySelector('button[type="submit"]');
+  let isSubmitting = false;
+
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (isSubmitting || store.isOperationLoading('createDisruption')) return;
+
     const type = typeSelect.value;
     const selectedStudentId = studentSelect.value;
 
-    if (type === 'student_cancel' && selectedStudentId) {
-      store.closeModal();
-      store.cancelStudent(selectedStudentId);
+    if (type === 'student_cancel' && !selectedStudentId) {
+      store.showToast('Please select a student from the manifest.', 'danger');
       return;
     }
 
-    const title = titleInput.value;
-    const busId = busSelect.value || null;
-    const routeId = routeSelect.value || null;
-    const location = locationInput.value;
-    const severity = backdrop.querySelector('#disruption-severity-select').value;
-    const impact = backdrop.querySelector('#disruption-impact-input').value;
+    isSubmitting = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `${Icons.zap(16, '#fff')} Declaring Disruption...`;
+    }
 
-    store.createDisruption({
-      type,
-      title,
-      busId,
-      routeId,
-      location,
-      severity,
-      impact
-    });
+    try {
+      if (type === 'student_cancel' && selectedStudentId) {
+        store.closeModal();
+        store.cancelStudent(selectedStudentId);
+        return;
+      }
+
+      const title = titleInput.value;
+      const busId = busSelect.value || null;
+      const routeId = routeSelect.value || null;
+      const location = locationInput.value;
+      const severity = backdrop.querySelector('#disruption-severity-select').value;
+      const impact = backdrop.querySelector('#disruption-impact-input').value;
+
+      store.createDisruption({
+        type,
+        title,
+        busId,
+        routeId,
+        location,
+        severity,
+        impact
+      });
+    } catch (err) {
+      console.warn('Disruption declaration error:', err);
+      store.showToast('Unable to declare disruption. Please check form inputs and retry.', 'danger');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `${Icons.zap(16, '#fff')} Trigger AI Replanning Ingestion`;
+      }
+      isSubmitting = false;
+    }
   });
 
   return backdrop;

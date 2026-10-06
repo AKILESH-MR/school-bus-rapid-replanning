@@ -20,12 +20,16 @@ export async function createDatabase(options = {}) {
   const requestedBackend = options.backend || process.env.DB_BACKEND || 'sqlite';
   const forcePostgres = requestedBackend === 'postgres' || options.usePostgres === true;
 
+  // DYNAMIC BACKEND SELECTION & PROBING:
+  // When PostgreSQL is requested, the factory proactively tests TCP/authentication connectivity
+  // before binding the database instance.
   if (forcePostgres) {
     try {
       const pgConnection = new PgConnectionManager(options.pgConfig || {});
       const test = await pgConnection.testConnection();
 
       if (test.connected) {
+        // PostgreSQL reachable: execute pending migrations, seed data if empty, and activate PgDatabase facade
         const pgDb = new PgDatabase(pgConnection);
         await pgDb.init({
           runMigrations: options.runMigrations !== false,
@@ -42,6 +46,10 @@ export async function createDatabase(options = {}) {
         console.log(`[Database] Successfully connected to PostgreSQL at ${test.config.host}:${test.config.port}/${test.config.database}`);
         return activeDatabaseInstance;
       } else {
+        // SEAMLESS SQLITE FAILOVER:
+        // Connection refused (e.g. ECONNREFUSED) or invalid credentials.
+        // Instead of halting server boot, gracefully fall back to LocalDatabase (SQLite / DatabaseSync).
+        // Flags `isFallback: true` in metadata so monitoring endpoints (/api/health) can expose the state.
         console.warn(`[Database Warning] Failed to connect to PostgreSQL (${test.error}). Gracefully falling back to local SQLite database.`);
         const fallbackDb = new LocalDatabase(options.dbPath);
         activeDatabaseInstance = fallbackDb;

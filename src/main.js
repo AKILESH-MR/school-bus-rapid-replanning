@@ -25,6 +25,7 @@ import { renderCreateDisruptionModal } from './components/modals/CreateDisruptio
 import { renderAddStudentModal } from './components/modals/AddStudentModal.js';
 import { renderBusDetailModal } from './components/modals/BusDetailModal.js';
 import { renderManualLocationModal } from './components/modals/ManualLocationModal.js';
+import { renderPendingActionsModal } from './components/modals/PendingActionsModal.js';
 
 function renderApp() {
   const root = document.getElementById('app');
@@ -109,6 +110,8 @@ function renderApp() {
       modalElement = renderBusDetailModal();
     } else if (state.activeModal === 'manual_location') {
       modalElement = renderManualLocationModal();
+    } else if (state.activeModal === 'pending_actions') {
+      modalElement = renderPendingActionsModal();
     }
 
     if (modalElement) {

@@ -41,6 +41,13 @@
  * ============================================================================
  */
 
+// HARD CONSTRAINT ENFORCEMENT & SAFETY INVARIANTS:
+// Operational safety requires strict binary filtering before scoring.
+// Rather than applying soft mathematical penalties (which might still allow an invalid
+// vehicle to be ranked first if other metrics are low), violations such as capacity exhaustion,
+// driver rest period, driver sickness, or wheelchair lift absence immediately reject the candidate.
+// This guarantees that the engine will NEVER propose an illegal or physically impossible plan.
+
 /**
  * Calculates planar geographic distance in miles between two latitude/longitude coordinates.
  */
@@ -383,7 +390,10 @@ export const routeInsertion = {
 
     const stops = route.stops;
 
-    // Find the first valid insertion position (strictly AFTER all completed/passed stops)
+    // COMPLETED STOP IMMUTABILITY & ROUTE INTEGRITY:
+    // Stops with status 'completed' or 'passed' have already been physically serviced by the bus.
+    // The insertion index is strictly constrained to `startIndex` (after all completed stops)
+    // to prevent retroactive insertion into past route segments.
     let startIndex = 0;
     for (let i = 0; i < stops.length; i++) {
       if (stops[i].status === 'completed' || stops[i].status === 'passed') {
@@ -394,7 +404,8 @@ export const routeInsertion = {
       startIndex = progress.completedStops.length;
     }
 
-    // Measure distance starting from current bus position through remaining stops
+    // Measure distance starting from current bus position through remaining stops.
+    // Detour distance is calculated as marginal expansion: (trialRemainingDist - originalRemainingDist).
     const currentBusPos = progress.currentBusPosition || bus.coords || (stops[0] ? stops[0].coords : null);
     const originalRemaining = stops.slice(startIndex);
     const originalRemainingDist = this.calculateTotalDistance(originalRemaining, currentBusPos);
@@ -405,7 +416,9 @@ export const routeInsertion = {
 
     const maxIndex = Math.max(startIndex, stops.length);
 
-    // Test insertion ONLY in valid remaining route positions
+    // GREEDY EVALUATION:
+    // Evaluate inserting the new stop at every uncompleted index k from startIndex to the route end.
+    // Preserves the index k that produces the minimum added detour mileage.
     for (let k = startIndex; k <= maxIndex; k++) {
       const trialStops = [...stops.slice(0, k), studentStop, ...stops.slice(k)];
       const trialRemaining = trialStops.slice(startIndex);
@@ -419,6 +432,10 @@ export const routeInsertion = {
       }
     }
 
+    // DELAY CALCULATION:
+    // Total added delay consists of:
+    // 1. Boarding dwell time: 3.5 min for wheelchair lift operation, 2.0 min for standard passenger.
+    // 2. Additional transit driving time: added distance divided by standard 20 mph urban operating speed.
     const isWheelchair = studentStop.specialNeeds?.toLowerCase().includes('wheelchair');
     const dwellTimeMins = isWheelchair ? 3.5 : 2.0;
     const transitTimeMins = (minAddedDistance / 20.0) * 60.0;
@@ -495,6 +512,12 @@ export const candidateScorer = {
     gpsAgeSeconds = 0,
     weights = { distanceWeight: 1.0, delayWeight: 1.5, loadWeight: 2.0, disruptionWeight: 0.5 }
   }) {
+    // HEURISTIC SCORING FORMULA:
+    // Balances passenger travel time, vehicle crowding, and passenger disruption:
+    // 1. Distance component (weight = 1.0): Penalizes overall detour miles.
+    // 2. Delay component (weight = 1.5): Heavily penalizes schedule delay to protect arrival times.
+    // 3. Load component (weight = 2.0): Disproportionately penalizes buses near 100% capacity to prevent overcrowding.
+    // 4. Disruption component (weight = 0.5): Multiplies delay by existing passengers on board.
     const distanceComp = Math.max(0, additionalDistance) * weights.distanceWeight;
     const delayComp = additionalDelay * weights.delayWeight;
     const loadRatio = (currentLoad + requiredSeats) / capacity;
@@ -503,7 +526,11 @@ export const candidateScorer = {
     const driverDistComp = driverDistanceMi * 0.2;
     const baseDistanceScore = parseFloat((distanceComp + driverDistComp).toFixed(2));
 
-    // Determine GPS uncertainty adjustment according to telemetry state
+    // GPS UNCERTAINTY DEGRADATION MODEL:
+    // Distance calculations rely on bus coordinates. When telematics fixes degrade or signal cuts out,
+    // the true position is uncertain. Rather than guessing coordinates, the scorer applies monotonic
+    // heuristic uncertainty penalties (expansion rates + flat penalties) to ensure fresh vehicles
+    // are naturally preferred over stale ones.
     const normalizedGps = (gpsStatus || 'LIVE').toUpperCase();
     let trustLevel = 'HIGH';
     let confidenceMultiplier = 1.0;
@@ -512,31 +539,35 @@ export const candidateScorer = {
     let requiresVerification = false;
 
     if (normalizedGps === 'MANUAL') {
+      // VHF Radio checkpoint pinned by dispatcher: verified location with small confidence buffer
       trustLevel = 'MANUAL_VERIFIED';
       confidenceMultiplier = 0.85;
       distanceExpansionRate = 0.10;
       flatUncertaintyPenalty = 0.50;
       requiresVerification = false;
     } else if (normalizedGps === 'NO_SIGNAL') {
+      // Hardware dropped / dead zone (>600s): maximum penalty to disincentivize dispatching unmonitored bus
       trustLevel = 'NONE';
       confidenceMultiplier = 0.10;
       distanceExpansionRate = 1.00;
       flatUncertaintyPenalty = 8.00;
       requiresVerification = true;
     } else if (normalizedGps === 'STALE' || gpsAgeSeconds >= 120) {
+      // Telematics age 121s - 600s: significant distance inflation (+60%) requiring dispatcher confirmation
       trustLevel = 'LOW';
       confidenceMultiplier = 0.40;
       distanceExpansionRate = 0.60;
       flatUncertaintyPenalty = 4.00;
       requiresVerification = true;
     } else if (normalizedGps === 'LAST_KNOWN' || gpsAgeSeconds > 60) {
+      // Telematics age 61s - 120s: moderate uncertainty expansion (+25%)
       trustLevel = 'MEDIUM';
       confidenceMultiplier = 0.75;
       distanceExpansionRate = 0.25;
       flatUncertaintyPenalty = 1.50;
       requiresVerification = true;
     } else {
-      // LIVE GPS
+      // Fresh LIVE telemetry (<= 60s): 100% confidence, zero uncertainty penalty
       trustLevel = 'HIGH';
       confidenceMultiplier = 1.0;
       distanceExpansionRate = 0.0;
@@ -1095,9 +1126,16 @@ export const replanningEngine = {
   replan(disruptionContext, state) {
     const { feasibleCandidates, rejectedCandidates } = candidateGenerator.generateCandidates(disruptionContext, state);
 
-    // Rank candidates by score ascending (lowest-cost candidate selected)
+    // CANDIDATE RANKING:
+    // Feasible candidates are sorted by composite cost score in ascending order (lowest score = highest quality).
+    // The candidate at index 0 represents the top recommendation.
     feasibleCandidates.sort((a, b) => a.score - b.score);
 
+    // INFEASIBILITY ESCALATION & PLAN FABRICATION PREVENTION:
+    // If all fleet vehicles violate one or more hard constraints (capacity, driver duty hours,
+    // wheelchair lift requirements, or destination mismatch), the engine REFUSES to invent or hallucinate a plan.
+    // Instead, it flags `noFeasibleSolution: true` and `escalateToManual: true`, attaching all rejected
+    // candidates with their specific failure reasons to give the human dispatcher full situational awareness.
     if (feasibleCandidates.length === 0) {
       const fallbackExplanation = buildExplanationAndUncertainty(null, [], rejectedCandidates, disruptionContext, state);
       return {

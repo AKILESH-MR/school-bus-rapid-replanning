@@ -36,6 +36,25 @@ class AppStore {
       networkStatus: 'online', // 'online' | 'degraded' | 'offline'
       pendingOfflineChanges: savedPending,
       lastSyncTimestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      lastSyncResult: null,
+
+      // Async Operations: Loading and Error States for UI Feedback & Retry
+      loadingStates: {
+        initialLoad: false,
+        planDecision: false,
+        sync: false,
+        createDisruption: false,
+        replanGeneration: false,
+        manualGps: false
+      },
+      errorStates: {
+        initialLoad: null,
+        planDecision: null,
+        sync: null,
+        createDisruption: null,
+        replanGeneration: null,
+        manualGps: null
+      },
 
       // Domain Entities (Deep cloned for state isolation)
       buses: JSON.parse(JSON.stringify(BUSES)),
@@ -64,8 +83,8 @@ class AppStore {
       searchQuery: "",
       filterStatus: "all",
       
-  // Modals
-      activeModal: null, // 'create_disruption' | 'add_student' | 'bus_detail' | 'manual_location' | null
+      // Modals
+      activeModal: null, // 'create_disruption' | 'add_student' | 'bus_detail' | 'manual_location' | 'pending_actions' | null
       modalPayload: null,
       
       // Toast notifications
@@ -106,6 +125,40 @@ class AppStore {
     } catch (e) {
       console.warn('Unable to persist pending offline queue to localStorage', e);
     }
+  }
+
+  // =========================================================================
+  // OPERATION LOADING & ERROR FEEDBACK CONTROLS
+  // =========================================================================
+  setLoadingState(operation, isLoading) {
+    if (!this.state.loadingStates) {
+      this.state.loadingStates = { initialLoad: false, planDecision: false, sync: false, createDisruption: false, replanGeneration: false, manualGps: false };
+    }
+    this.state.loadingStates[operation] = !!isLoading;
+    this.notify();
+  }
+
+  setErrorState(operation, errorObj) {
+    if (!this.state.errorStates) {
+      this.state.errorStates = { initialLoad: null, planDecision: null, sync: null, createDisruption: null, replanGeneration: null, manualGps: null };
+    }
+    this.state.errorStates[operation] = errorObj;
+    this.notify();
+  }
+
+  clearErrorState(operation) {
+    if (this.state.errorStates && this.state.errorStates[operation]) {
+      this.state.errorStates[operation] = null;
+      this.notify();
+    }
+  }
+
+  isOperationLoading(operation) {
+    return Boolean(this.state.loadingStates?.[operation]);
+  }
+
+  getOperationError(operation) {
+    return this.state.errorStates?.[operation] || null;
   }
 
   // Network Failure & Resilience Management
@@ -150,6 +203,10 @@ class AppStore {
     } catch (e) {}
   }
 
+  // OFFLINE QUEUE IDEMPOTENCY & REPLAY DEDUPLICATION:
+  // Disconnected devices may submit or replay the same operational action multiple times.
+  // We record completed action IDs in a persistent set (syncedActionIds) to guarantee that
+  // replayed requests do not execute duplicate vehicle load changes or route mutations.
   recordActionSynced(actionId) {
     if (!this.state.syncedActionIds) this.state.syncedActionIds = this.loadSyncedActionIds();
     this.state.syncedActionIds.add(actionId);
@@ -166,6 +223,10 @@ class AppStore {
     this.saveSyncedActionIds();
   }
 
+  // STORE-AND-FORWARD ACTION QUEUEING:
+  // When network connectivity is severed or degraded, dispatcher actions cannot reach the central REST API.
+  // Instead of failing or blocking the UI, actions are captured in `pendingOfflineChanges` within localStorage.
+  // Actions are tagged with status 'PENDING', retryCount = 0, and a client-generated UUID idempotency key.
   queueAction(actionInput) {
     const actionId = actionInput.actionId || `ACT-${Date.now()}`;
     if (this.isActionSynced(actionId)) {
@@ -198,6 +259,9 @@ class AppStore {
     return actionItem;
   }
 
+  // DUAL-MODE DISPATCH PIPELINE:
+  // If the browser reports 'online', actions execute immediately and asynchronously sync to the backend API.
+  // If offline or backend unreachable, actions gracefully divert into the local store-and-forward queue.
   dispatchAction(actionInput) {
     const { actionId, actionType, userId, role, payload } = actionInput;
     const timestamp = new Date().toISOString();
@@ -243,11 +307,9 @@ class AppStore {
       this.showToast(`Action ${actionType} executed online.`, 'success');
       this.notify();
 
-      if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
-        import('../api/client.js').then(api => {
-          api.syncOfflineActions([actionItem]).catch(err => {
-             console.warn('Failed to persist online action to backend:', err);
-          });
+      if (typeof window !== 'undefined' && typeof window.fetch === 'function' && typeof api.syncOfflineActions === 'function') {
+        api.syncOfflineActions([actionItem]).catch(err => {
+          console.warn('Failed to persist online action to backend:', err);
         });
       }
 
@@ -271,28 +333,41 @@ class AppStore {
 
 
   retryAction(actionId) {
+    if (this.state.loadingStates?.sync) return;
     const action = this.getPendingActionById(actionId);
     if (!action) return;
     action.status = 'PENDING';
+    action.error = null;
     action.retryCount = (action.retryCount || 0) + 1;
     action.lastAttempt = new Date().toISOString();
     this.savePendingOfflineChanges();
-    if (this.state.networkStatus === 'online') this.syncPendingOfflineChanges();
+    if (this.state.networkStatus === 'online') {
+      return this.syncPendingOfflineChanges();
+    } else {
+      this.notify();
+    }
   }
 
   retryFailedActions() {
+    if (this.state.loadingStates?.sync) return;
     let anyRetried = false;
     this.state.pendingOfflineChanges.forEach(a => {
       if (a.status === 'FAILED') {
         a.status = 'PENDING';
+        a.error = null;
         a.retryCount = (a.retryCount || 0) + 1;
         a.lastAttempt = new Date().toISOString();
         anyRetried = true;
       }
     });
     if (anyRetried) {
+      this.clearErrorState('sync');
       this.savePendingOfflineChanges();
-      if (this.state.networkStatus === 'online') this.syncPendingOfflineChanges();
+      if (this.state.networkStatus === 'online') {
+        return this.syncPendingOfflineChanges();
+      } else {
+        this.notify();
+      }
     }
   }
 
@@ -328,7 +403,17 @@ class AppStore {
     this.showToast(`[${this.state.networkStatus.toUpperCase()} MODE] Changes saved locally. Will sync when online.`, 'warning');
   }
 
+  // SYNCHRONIZATION PIPELINE & FAILURE RETENTION:
+  // When network connectivity returns, queued offline actions are transmitted via POST /api/sync.
+  // Invariants:
+  // 1. Successful actions transition to status 'EXECUTED' and register with recordActionSynced.
+  // 2. Failed actions are NEVER dropped or discarded silently; they are retained in `pendingOfflineChanges`
+  //    with status 'FAILED', their `retryCount` incremented, and error diagnostics attached.
+  // 3. Dispatchers can manually trigger individual retries via `retryAction(id)` or batch via `retryFailedActions()`.
   syncPendingOfflineChanges(options = {}) {
+    if (this.state.loadingStates?.sync) {
+      return { success: false, inProgress: true, syncedCount: 0, failedCount: 0 };
+    }
     const { force = false, simulateFailure = false } = options;
     if ((this.state.networkStatus !== 'online' && !force) && !simulateFailure) {
       let failedCount = 0;
@@ -341,6 +426,14 @@ class AppStore {
         }
       });
       this.savePendingOfflineChanges();
+      if (failedCount > 0) {
+        this.setErrorState('sync', {
+          message: `${failedCount} synchronization failed. Retry available when online.`,
+          retryable: true,
+          failedCount,
+          operation: 'sync'
+        });
+      }
       this.notify();
       return { success: false, syncedCount: 0, failedCount };
     }
@@ -348,15 +441,16 @@ class AppStore {
     const pendingActions = this.state.pendingOfflineChanges.filter(a => a.status === 'PENDING' || a.status === 'FAILED');
     if (pendingActions.length === 0) {
       this.showToast('System is synchronized with district servers.', 'info');
+      this.clearErrorState('sync');
       return { success: true, syncedCount: 0, failedCount: 0 };
     }
 
+    this.setLoadingState('sync', true);
     let syncedCount = 0;
     let failedCount = 0;
 
-    if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
-      import('../api/client.js').then(api => {
-        api.syncOfflineActions(pendingActions).then(result => {
+    if (typeof window !== 'undefined' && typeof window.fetch === 'function' && typeof api.syncOfflineActions === 'function') {
+      api.syncOfflineActions(pendingActions).then(result => {
           pendingActions.forEach(action => {
             if (result.success || (result.syncedIds && result.syncedIds.includes(action.actionId))) {
               action.status = 'EXECUTED';
@@ -369,15 +463,16 @@ class AppStore {
               failedCount++;
             }
           });
+          this._finalizeSyncResult(syncedCount, failedCount);
         }).catch(err => {
           pendingActions.forEach(action => {
             action.status = 'FAILED';
-            action.error = err.message;
+            action.error = err.message || 'Network sync error';
             action.retryCount = (action.retryCount || 0) + 1;
             failedCount++;
           });
+          this._finalizeSyncResult(syncedCount, failedCount);
         });
-      });
       
       return { success: true, syncedCount: pendingActions.length, failedCount: 0 };
     } else {
@@ -395,8 +490,12 @@ class AppStore {
           syncedCount++;
         });
       }
+      return this._finalizeSyncResult(syncedCount, failedCount);
     }
+  }
 
+  _finalizeSyncResult(syncedCount, failedCount) {
+    this.setLoadingState('sync', false);
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     if (syncedCount > 0) {
@@ -414,8 +513,29 @@ class AppStore {
     this.savePendingOfflineChanges();
     this.state.lastSyncTimestamp = nowStr;
 
-    if (syncedCount > 0) {
-      this.showToast(`Synchronized ${syncedCount} pending local operational change(s) with Central Servers.`, 'success');
+    this.state.lastSyncResult = {
+      timestamp: nowStr,
+      success: failedCount === 0,
+      syncedCount,
+      failedCount,
+      message: failedCount === 0
+        ? (syncedCount > 0 ? `${syncedCount} action(s) synchronized successfully.` : 'All actions synchronized.')
+        : `${failedCount} synchronization failed. Retry available.`
+    };
+
+    if (failedCount > 0) {
+      this.setErrorState('sync', {
+        message: `${failedCount} synchronization failed. Retry available.`,
+        retryable: true,
+        failedCount,
+        operation: 'sync'
+      });
+      this.showToast(`${failedCount} synchronization failed. Retry available.`, 'danger');
+    } else {
+      this.clearErrorState('sync');
+      if (syncedCount > 0) {
+        this.showToast('Changes synchronized successfully.', 'success');
+      }
     }
     this.notify();
 
@@ -424,14 +544,26 @@ class AppStore {
 
   updateBusLocationManually(busId, coords, locationName = '', reason = 'Dispatcher Manual Checkpoint') {
     const bus = this.state.buses.find(b => b.id === busId);
-    if (!bus) return;
+    if (!bus) {
+      this.setErrorState('manualGps', { message: `Vehicle ${busId} not found in active fleet.`, retryable: true, operation: 'manualGps' });
+      return;
+    }
 
+    const lat = parseFloat(coords?.[0]);
+    const lng = parseFloat(coords?.[1]);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      this.setErrorState('manualGps', { message: 'Invalid GPS coordinates provided. Latitude [-90,90], Longitude [-180,180].', retryable: true, operation: 'manualGps' });
+      this.showToast('Invalid GPS coordinates for manual checkpoint.', 'danger');
+      return;
+    }
+
+    this.clearErrorState('manualGps');
     const prevCoords = [...bus.coords];
     const prevLocation = bus.lastKnownLocation || 'Previous GPS Coordinates';
     const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     // Update location and mark explicitly as manual checkpoint (never pretend it is a live fix)
-    bus.coords = [parseFloat(coords[0]), parseFloat(coords[1])];
+    bus.coords = [lat, lng];
     bus.gpsStatus = 'manual';
     bus.source = 'manual_dispatcher';
     bus.isManualLocation = true;
@@ -542,7 +674,19 @@ class AppStore {
   }
 
   async fetchInitialData() {
-    if (this.state.networkStatus === 'offline') return { source: 'local-fallback' };
+    if (this.state.loadingStates?.initialLoad) return { source: 'in-progress' };
+    this.setLoadingState('initialLoad', true);
+    this.clearErrorState('initialLoad');
+
+    if (this.state.networkStatus === 'offline') {
+      this.setLoadingState('initialLoad', false);
+      this.setErrorState('initialLoad', {
+        message: 'Network offline. Operating with local cached fleet data.',
+        retryable: true,
+        operation: 'initialLoad'
+      });
+      return { source: 'local-fallback' };
+    }
 
     try {
       const results = await Promise.allSettled([
@@ -572,17 +716,41 @@ class AppStore {
       }
 
       if (typeof this.refreshAllRouteProgress === 'function') this.refreshAllRouteProgress();
+      this.setLoadingState('initialLoad', false);
+      if (loadedFromBackend) {
+        this.clearErrorState('initialLoad');
+      } else {
+        this.setErrorState('initialLoad', {
+          message: 'Backend unavailable. Operating in local fallback mode.',
+          retryable: true,
+          operation: 'initialLoad'
+        });
+      }
       this.notify();
       return { source: loadedFromBackend ? 'backend' : 'local-fallback' };
     } catch (error) {
       console.warn('Backend unavailable; continuing with local mock fallback.', error?.message || error);
+      this.setLoadingState('initialLoad', false);
+      this.setErrorState('initialLoad', {
+        message: 'Backend unavailable. Operating in local fallback mode.',
+        retryable: true,
+        operation: 'initialLoad'
+      });
+      this.notify();
       return { source: 'local-fallback', error };
     }
   }
 
+  retryInitialDataLoad() {
+    if (this.state.loadingStates?.initialLoad) return;
+    return this.fetchInitialData();
+  }
+
   persistOnlineDisruption(disruption) {
     if (this.state.networkStatus !== 'online' || !disruption) return;
-    Promise.resolve()
+    this.setLoadingState('replanGeneration', true);
+    this.clearErrorState('replanGeneration');
+    return Promise.resolve()
       .then(() => api.createDisruption({ ...disruption, userRole: this.state.currentRole || 'Dispatcher' }))
       .then(saved => {
         if (saved?.id && saved.id !== disruption.id) disruption.id = saved.id;
@@ -601,18 +769,179 @@ class AppStore {
         });
       })
       .then(result => {
+        this.setLoadingState('replanGeneration', false);
+        this.clearErrorState('replanGeneration');
         if (result?.replan) {
           disruption.aiRecommendation = { ...disruption.aiRecommendation, ...result.replan };
+          this.showToast('Replanning recommendation generated.', 'success');
           this.notify();
         }
       })
       .catch(error => {
+        this.setLoadingState('replanGeneration', false);
+        this.setErrorState('replanGeneration', {
+          message: 'Unable to generate replanning recommendation from backend. Local recommendation active.',
+          retryable: true,
+          disruptionId: disruption.id,
+          disruption,
+          operation: 'replanGeneration'
+        });
+        this.showToast('Unable to synchronize replan with backend. Local recommendation active.', 'danger');
         console.warn('Backend disruption/replan persistence failed; local state remains active.', error?.message || error);
       });
   }
 
+  generateReplan(disruptionId) {
+    if (this.isOperationLoading('replanGeneration')) {
+      console.warn('Replan generation already in progress; duplicate request suppressed.');
+      return;
+    }
+    const targetId = disruptionId || this.state.selectedDisruptionId;
+    const disruption = this.state.disruptions.find(d => d.id === targetId);
+    if (!disruption) return;
+
+    this.setLoadingState('replanGeneration', true);
+    this.clearErrorState('replanGeneration');
+
+    try {
+      if (disruption.type === 'urgent_add') {
+        const student = disruption.studentId
+          ? this.state.students.find(s => s.id === disruption.studentId)
+          : {
+              id: `STU-GEN-${Date.now()}`,
+              name: disruption.studentName || 'Urgent Passenger',
+              stopName: disruption.location || 'Urgent Stop',
+              coords: disruption.coords || [37.77, -122.42],
+              schoolId: disruption.destinationSchoolId || 'SCH-01',
+              specialNeeds: disruption.specialNeeds || 'None'
+            };
+
+        const { feasibleCandidates, allEvaluations } = this.evaluateUrgentStudentAddition(student);
+
+        if (feasibleCandidates.length === 0) {
+          disruption.noFeasibleSolution = true;
+          disruption.aiRecommendationAvailable = false;
+          disruption.aiRecommendation = null;
+          disruption.candidateEvaluations = allEvaluations.map(c => ({
+            busId: c.bus.id,
+            routeId: c.route.id,
+            driverName: c.driver?.name || 'Unassigned',
+            isFeasible: false,
+            reasons: c.reasons.join('; ')
+          }));
+          this.logFallbackTriggered('NO_FEASIBLE_CANDIDATE_ESCALATION', { disruptionId: disruption.id });
+          this.setLoadingState('replanGeneration', false);
+          this.showToast('No Feasible Solution — Manual Intervention Required', 'warning');
+          this.notify();
+          return;
+        }
+
+        const best = feasibleCandidates[0];
+        const greedyResult = replanningEngine.replan({
+          type: 'urgent_add',
+          studentStop: {
+            name: student.stopName,
+            coords: student.coords || student.pickupCoords || [37.77, -122.42],
+            specialNeeds: student.specialNeeds || 'None'
+          },
+          destinationSchoolId: student.schoolId || 'SCH-01',
+          requiredSeats: 1
+        }, {
+          buses: [best.bus],
+          routes: [best.route],
+          drivers: [best.driver]
+        });
+
+        let greedyInsertionPosition = greedyResult?.insertionPosition;
+        if (greedyInsertionPosition == null) {
+          const stops = best.route?.stops || [];
+          greedyInsertionPosition = stops.findIndex(st => st.status !== 'completed' && st.status !== 'passed');
+          if (greedyInsertionPosition < 0) greedyInsertionPosition = Math.max(0, stops.length - 1);
+        }
+        const routeVersionKey = computeRouteVersionKey(best.route);
+
+        disruption.noFeasibleSolution = false;
+        disruption.aiRecommendationAvailable = true;
+        disruption.aiRecommendation = {
+          planId: `REPLAN-${Date.now().toString().slice(-4)}`,
+          strategy: 'Greedy Dynamic Insertion & Delay Minimization',
+          recommendedBusId: best.bus.id,
+          recommendedRouteId: best.route.id,
+          recommendedDriverName: best.driver?.name || 'Assigned Driver',
+          availableSeats: best.seatsAvailable,
+          additionalDelayMins: best.delayMins,
+          additionalDistanceKm: best.driverDistanceKm,
+          additionalDistanceMi: best.driverDistanceMi,
+          insertionPosition: greedyInsertionPosition,
+          greedyInsertionPosition,
+          routeVersionKey,
+          score: best.score,
+          whySelected: [
+            `Selected ${best.bus.id} with ${best.seatsAvailable} seats available`,
+            `Driver ${best.driver?.name} available with zero scheduling conflicts`,
+            `Route delay bounded to +${best.delayMins} mins`
+          ],
+          candidateEvaluations: allEvaluations.map(c => ({
+            busId: c.bus.id,
+            routeId: c.route.id,
+            driverName: c.driver?.name || 'Unassigned',
+            isFeasible: c.isFeasible,
+            seatsAvailable: c.seatsAvailable,
+            delayMins: c.delayMins,
+            score: c.score,
+            statusText: c.isFeasible ? 'Feasible Candidate' : c.reasons.join(', ')
+          }))
+        };
+      } else if (disruption.type === 'breakdown' && disruption.busId) {
+        this.handleVehicleBreakdown(disruption.busId, disruption);
+      } else if (disruption.type === 'student_cancel' && disruption.studentId) {
+        this.cancelStudent(disruption.studentId);
+      }
+
+      this.setLoadingState('replanGeneration', false);
+      this.clearErrorState('replanGeneration');
+      this.recordAuditEvent({
+        action: 'RECOMMENDATION_GENERATED',
+        actionType: 'REPLAN_GENERATED',
+        userRole: this.state.currentUser?.name || 'Dispatcher',
+        disruptionId: disruption.id,
+        recommendationId: disruption.aiRecommendation?.planId,
+        timestamp: new Date().toISOString(),
+        eventMessage: `Replan generated for ${disruption.id}.`,
+        details: disruption.aiRecommendation
+      });
+      this.showToast('Replanning recommendation generated.', 'success');
+      this.notify();
+
+      if (this.state.networkStatus === 'online') {
+        this.persistOnlineDisruption(disruption);
+      }
+    } catch (err) {
+      this.setLoadingState('replanGeneration', false);
+      this.setErrorState('replanGeneration', {
+        message: 'Unable to generate replanning recommendation. Dispatcher retry available.',
+        retryable: true,
+        disruptionId: disruption.id,
+        operation: 'replanGeneration'
+      });
+      this.showToast('Replanning evaluation error. Retry available.', 'danger');
+      this.notify();
+    }
+  }
+
+  retryGenerateReplan(disruptionId) {
+    if (this.state.loadingStates?.replanGeneration) return;
+    const disruption = this.state.disruptions.find(d => d.id === disruptionId) || this.state.errorStates?.replanGeneration?.disruption;
+    if (disruption) {
+      return this.generateReplan(disruption.id);
+    }
+  }
+
   persistPlanDecision(disruptionId, action, payload = {}) {
-    if (this.state.networkStatus !== 'online' || !disruptionId) return;
+    if (this.state.networkStatus !== 'online' || !disruptionId) {
+      this.setLoadingState('planDecision', false);
+      return;
+    }
     const userId = this.state.currentUser?.id || this.state.currentUser?.userId || 'dispatcher-1';
     const userRole = this.state.currentRole || this.state.currentUser?.role || 'Dispatcher';
     const body = { ...payload, userId, userRole, actionType: action };
@@ -621,11 +950,49 @@ class AppStore {
     if (action === 'APPROVE') request = api.approveReplan(disruptionId, body);
     else if (action === 'REJECT') request = api.rejectReplan(disruptionId, body);
     else if (action === 'MODIFY') request = api.modifyReplan(disruptionId, body);
-    else return;
+    else {
+      this.setLoadingState('planDecision', false);
+      return;
+    }
 
-    request.catch(error => {
-      console.warn(`Backend ${action.toLowerCase()} persistence failed; local state remains active.`, error?.message || error);
-    });
+    return request
+      .then(res => {
+        this.setLoadingState('planDecision', false);
+        this.clearErrorState('planDecision');
+        if (action === 'APPROVE') {
+          this.showToast('Plan approved successfully.', 'success');
+        } else if (action === 'REJECT') {
+          this.showToast('Plan rejected successfully. Original route preserved.', 'warning');
+        } else if (action === 'MODIFY') {
+          this.showToast('Modified plan applied successfully.', 'success');
+        }
+        this.notify();
+        return res;
+      })
+      .catch(error => {
+        this.setLoadingState('planDecision', false);
+        this.setErrorState('planDecision', {
+          message: `Unable to synchronize plan ${action.toLowerCase()} with central server. Local plan active.`,
+          retryable: true,
+          action,
+          disruptionId,
+          payload: body,
+          operation: 'planDecision'
+        });
+        this.showToast(`Unable to synchronize plan ${action.toLowerCase()} with backend. Retry available.`, 'danger');
+        console.warn(`Backend ${action.toLowerCase()} persistence failed; local state remains active.`, error?.message || error);
+      });
+  }
+
+  retryPlanDecision(disruptionId) {
+    if (this.state.loadingStates?.planDecision) return;
+    const err = this.state.errorStates?.planDecision;
+    const targetId = disruptionId || err?.disruptionId;
+    const action = err?.action || 'APPROVE';
+    const payload = err?.payload || {};
+    this.setLoadingState('planDecision', true);
+    this.clearErrorState('planDecision');
+    return this.persistPlanDecision(targetId, action, payload);
   }
 
   getState() {
@@ -1211,7 +1578,7 @@ class AppStore {
     const { feasibleCandidates, allEvaluations } = this.evaluateUrgentStudentAddition(studentData);
     const bestCandidate = feasibleCandidates[0] || null;
 
-    const newId = `STU-${Math.floor(1010 + Math.random() * 8000)}`;
+    const newId = studentData.id || `STU-${Math.floor(1010 + Math.random() * 8000)}`;
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -1247,6 +1614,7 @@ class AppStore {
         impact: 'No suitable bus exists matching capacity, driver, and destination school requirements.',
         status: 'unresolved',
         aiRecommendationAvailable: false,
+        aiRecommendation: null,
         noFeasibleSolution: true,
         candidateEvaluations: allEvaluations.map(e => ({
           busId: e.bus.id,
@@ -1260,6 +1628,12 @@ class AppStore {
           statusText: e.reasons.join('; ')
         }))
       };
+
+      this.logFallbackTriggered('NO_FEASIBLE_CANDIDATE_ESCALATION', {
+        disruptionId: newDisruptionId,
+        studentId: newId,
+        reason: 'Fleet capacity and route compatibility exhausted'
+      });
 
       this.state.disruptions.unshift(failureDisruption);
       this.state.selectedDisruptionId = newDisruptionId;
@@ -1619,11 +1993,26 @@ class AppStore {
     this.setActiveTab('replanning');
     this.notify();
   }
-  // 10. Update student assignment ONLY after dispatcher approval
-  // 10. Update student assignment ONLY after dispatcher approval
+  // =========================================================================
+  // HUMAN-IN-THE-LOOP (HITL) APPROVAL WORKFLOW:
+  // Invariants:
+  // 1. Separation of Proposed vs. Operational State: AI recommendations remain purely
+  //    advisory until the human dispatcher explicitly invokes acceptAIPlan.
+  //    Before approval, vehicle loads, passenger rosters, and route stops remain untouched.
+  // 2. Exact Mutation Commit: Upon approval, the agreed modifications (bus load changes,
+  //    greedy stop insertion at exact calculated index, student status) are applied.
+  // 3. Stale Recommendation Protection: The `routeVersionKey` fingerprint prevents applying
+  //    a recommendation against a route that progressed while the plan was pending review.
+  // 4. Immutable Decision Trail: An append-only audit event captures original, proposed,
+  //    and final state snapshots for compliance and verification.
+  // =========================================================================
   acceptAIPlan(disruptionId) {
     const disruption = this.state.disruptions.find(d => d.id === disruptionId);
     if (!disruption) return;
+    if (disruption.status === 'accepted') {
+      console.warn('Plan already accepted; duplicate execution suppressed.');
+      return;
+    }
 
     disruption.status = 'accepted';
     disruption.endToEndRecoveryTimeMs = Date.now() - disruption._createdAtMs;
@@ -1938,7 +2327,12 @@ class AppStore {
       });
     }
 
-    this.showToast(`Plan Accepted for ${disruption.id}! Emergency plan executed.`, 'success');
+    const rec = disruption.aiRecommendation;
+    if (rec?.wasStaleReplanned) {
+      this.showToast(`Plan Accepted: Route state changed; insertion recalculated at stop #${rec.appliedInsertionPosition}.`, 'warning');
+    } else {
+      this.showToast(`Plan Accepted for ${disruption.id}! Emergency plan executed.`, 'success');
+    }
     this.notify();
     this.persistPlanDecision(disruption.id, 'APPROVE', { replanId: disruption.aiRecommendation?.planId || disruption.id });
   }
@@ -1980,6 +2374,10 @@ class AppStore {
   rejectAIPlan(disruptionId, reason = "Manual Route Override") {
     const disruption = this.state.disruptions.find(d => d.id === disruptionId);
     if (!disruption) return;
+    if (disruption.status === 'rejected') {
+      console.warn('Plan already rejected; duplicate execution suppressed.');
+      return;
+    }
 
     disruption.status = 'rejected';
     disruption.rejectionReason = reason;
@@ -2242,6 +2640,10 @@ class AppStore {
   acceptModifiedPlan(disruptionId, modifiedConstraints = null, selectedCandidate = null) {
     const disruption = this.state.disruptions.find(d => d.id === disruptionId);
     if (!disruption) return null;
+    if (disruption.status === 'accepted') {
+      console.warn('Plan already accepted; duplicate modification approval suppressed.');
+      return null;
+    }
 
     const customizer = this.state.customizer || {};
     const activeConstraints = modifiedConstraints || customizer.constraints || {};
@@ -2311,6 +2713,11 @@ class AppStore {
 
   rejectModifiedPlan(disruptionId, reason = "Dispatcher rejected modified plan") {
     const disruption = this.state.disruptions.find(d => d.id === disruptionId);
+    if (!disruption) return;
+    if (disruption.status === 'rejected') {
+      console.warn('Plan already rejected; duplicate modification rejection suppressed.');
+      return;
+    }
     this.closeConstraintCustomizer();
 
     this.state.metrics.recentAuditLogs.unshift({

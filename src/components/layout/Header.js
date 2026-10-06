@@ -7,23 +7,26 @@ export function renderHeader() {
   const isDispatcher = state.currentRole === 'dispatcher';
   const activeTabName = state.activeTab.charAt(0).toUpperCase() + state.activeTab.slice(1);
   const netStatus = state.networkStatus || 'online';
-  const pendingCount = state.pendingOfflineChanges ? state.pendingOfflineChanges.length : 0;
+  const queue = state.pendingOfflineChanges || [];
+  const pendingCount = queue.filter(a => a.status === 'PENDING').length;
+  const failedCount = queue.filter(a => a.status === 'FAILED').length;
+  const totalQueueCount = queue.length;
+  const isSyncing = state.loadingStates?.sync;
+  const initialLoadError = state.errorStates?.initialLoad;
+  const isInitialLoading = state.loadingStates?.initialLoad;
+
+  const now = new Date();
+  const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dateString = now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+
+  const netConfig = {
+    online: { color: '#059669', bg: '#ECFDF5', border: '#A7F3D0', icon: '🟢' },
+    degraded: { color: '#D97706', bg: '#FFFBEB', border: '#FDE68A', icon: '🟡' },
+    offline: { color: '#DC2626', bg: '#FEF2F2', border: '#FECACA', icon: '🔴' }
+  }[netStatus] || { color: '#059669', bg: '#ECFDF5', border: '#A7F3D0', icon: '🟢' };
 
   const header = document.createElement('header');
-  header.className = 'top-header';
-
-  // Live time formatting
-  const now = new Date();
-  const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const dateString = now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-
-  // Network badge colors and labels
-  const netConfig = {
-    online: { label: 'Online', color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0', icon: '🟢' },
-    degraded: { label: 'Degraded', color: '#D97706', bg: '#FFFBEB', border: '#FDE68A', icon: '🟡' },
-    offline: { label: 'Offline', color: '#EF4444', bg: '#FEF2F2', border: '#FECACA', icon: '🔴' }
-  }[netStatus] || { label: 'Online', color: '#10B981', bg: '#ECFDF5', border: '#A7F3D0', icon: '🟢' };
-
+  header.className = 'app-header';
   header.innerHTML = `
     <div class="header-left">
       <div class="page-title-group">
@@ -111,28 +114,58 @@ export function renderHeader() {
       </div>
     </div>
 
+    <!-- Visible Backend Offline / Data Loading Error Banner -->
+    ${initialLoadError ? `
+      <div style="grid-column: 1 / -1; width: 100%; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; padding: 10px 16px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem; color: #92400E;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-weight: 800; background: #D97706; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">BACKEND OFFLINE</span>
+          <span>${initialLoadError.message} All replanning features active with local data.</span>
+        </div>
+        <div>
+          <button id="banner-retry-backend-btn" class="action-btn secondary" style="padding: 4px 12px; font-size: 0.75rem;" ${isInitialLoading ? 'disabled' : ''}>
+            ${isInitialLoading ? 'Loading fleet...' : 'Retry Connection'}
+          </button>
+        </div>
+      </div>
+    ` : ''}
+
     <!-- Visible Network Status & Store-and-Forward Banner -->
-    ${netStatus === 'offline' ? `
+    ${failedCount > 0 ? `
+      <div style="grid-column: 1 / -1; width: 100%; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 10px 16px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem; color: #991B1B;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-weight: 800; background: #EF4444; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">SYNC ERROR</span>
+          <span><b>${failedCount}</b> synchronization failed. Retry available.</span>
+          ${state.lastSyncResult ? `<span style="font-size: 0.75rem; color: #991B1B; opacity: 0.85;">(${state.lastSyncResult.message})</span>` : ''}
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="banner-retry-sync-btn" class="action-btn warning" style="padding: 4px 12px; font-size: 0.75rem;" ${isSyncing ? 'disabled' : ''}>
+            ${isSyncing ? 'Synchronizing offline actions...' : 'Retry Sync'}
+          </button>
+          <button id="banner-view-pending-btn" class="action-btn secondary" style="padding: 4px 10px; font-size: 0.75rem;">View Queue (${totalQueueCount})</button>
+        </div>
+      </div>
+    ` : netStatus === 'offline' ? `
       <div style="grid-column: 1 / -1; width: 100%; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 10px 16px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem; color: #991B1B;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <span style="font-weight: 800; background: #EF4444; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">OFFLINE</span>
-          <span>Offline mode active. Actions will be stored locally and synchronized when connectivity returns.</span>
+          <span>Offline mode active. Actions stored locally in browser and synchronized when connectivity returns.</span>
           <span style="background: #FEE2E2; border: 1px solid #FCA5A5; font-weight: 700; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem;">Pending Sync: ${pendingCount}</span>
         </div>
         <div style="display: flex; gap: 8px;">
-          <button id="banner-view-pending-btn" class="action-btn secondary" style="padding: 4px 10px; font-size: 0.75rem;">View Pending Actions</button>
-          <button id="banner-retry-sync-btn" class="action-btn warning" style="padding: 4px 10px; font-size: 0.75rem;">Retry Sync</button>
+          <button id="banner-view-pending-btn" class="action-btn secondary" style="padding: 4px 10px; font-size: 0.75rem;">View Queue (${totalQueueCount})</button>
         </div>
       </div>
     ` : (pendingCount > 0 ? `
       <div style="grid-column: 1 / -1; width: 100%; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 8px; padding: 10px 16px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem; color: #92400E;">
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-weight: 800; background: #F59E0B; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">RESTORED</span>
-          <span>Network restored. <b>${pendingCount}</b> pending action(s) ready for synchronization.</span>
+          <span style="font-weight: 800; background: #F59E0B; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">PENDING SYNC</span>
+          <span><b>${pendingCount}</b> action(s) pending synchronization.</span>
         </div>
         <div style="display: flex; gap: 8px;">
-          <button id="banner-sync-now-btn" class="action-btn primary" style="padding: 4px 12px; font-size: 0.75rem;">Sync Now</button>
-          <button id="banner-view-pending-btn" class="action-btn secondary" style="padding: 4px 10px; font-size: 0.75rem;">View Pending Actions</button>
+          <button id="banner-sync-now-btn" class="action-btn primary" style="padding: 4px 12px; font-size: 0.75rem;" ${isSyncing ? 'disabled' : ''}>
+            ${isSyncing ? 'Synchronizing offline actions...' : 'Sync Now'}
+          </button>
+          <button id="banner-view-pending-btn" class="action-btn secondary" style="padding: 4px 10px; font-size: 0.75rem;">View Queue (${totalQueueCount})</button>
         </div>
       </div>
     ` : '')}
@@ -143,6 +176,13 @@ export function renderHeader() {
   if (netSelect) {
     netSelect.addEventListener('change', (e) => {
       store.setNetworkStatus(e.target.value);
+    });
+  }
+
+  const retryBackendBtn = header.querySelector('#banner-retry-backend-btn');
+  if (retryBackendBtn) {
+    retryBackendBtn.addEventListener('click', () => {
+      store.retryInitialDataLoad();
     });
   }
 

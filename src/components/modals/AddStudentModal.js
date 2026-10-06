@@ -97,30 +97,56 @@ export function renderAddStudentModal() {
   });
 
   const form = backdrop.querySelector('#add-student-form');
+  const submitBtn = backdrop.querySelector('button[type="submit"]');
+  let isSubmitting = false;
+
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const name = backdrop.querySelector('#student-name-input').value;
-    const grade = backdrop.querySelector('#student-grade-select').value;
-    const schoolSelect = backdrop.querySelector('#student-school-select');
-    const schoolId = schoolSelect.value;
-    const schoolName = schoolSelect.options[schoolSelect.selectedIndex].getAttribute('data-name');
-    const stopName = backdrop.querySelector('#student-stop-input').value;
-    const guardianName = backdrop.querySelector('#guardian-name-input').value;
-    const guardianPhone = backdrop.querySelector('#guardian-phone-input').value;
-    const specialNeeds = backdrop.querySelector('#student-special-needs-select').value;
+    if (isSubmitting) return;
 
-    store.addStudent({
-      name,
-      grade,
-      schoolId,
-      schoolName,
-      stopName,
-      guardianName,
-      guardianPhone,
-      specialNeeds,
-      busId: "UNASSIGNED",
-      routeId: "UNASSIGNED"
-    });
+    const name = backdrop.querySelector('#student-name-input').value.trim();
+    if (!name) {
+      store.showToast('Please enter the student\'s full name.', 'danger');
+      return;
+    }
+
+    isSubmitting = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `${Icons.check(16, '#fff')} Registering & Assigning...`;
+    }
+
+    try {
+      const grade = backdrop.querySelector('#student-grade-select').value;
+      const schoolSelect = backdrop.querySelector('#student-school-select');
+      const schoolId = schoolSelect.value;
+      const schoolName = schoolSelect.options[schoolSelect.selectedIndex].getAttribute('data-name');
+      const stopName = backdrop.querySelector('#student-stop-input').value;
+      const guardianName = backdrop.querySelector('#guardian-name-input').value;
+      const guardianPhone = backdrop.querySelector('#guardian-phone-input').value;
+      const specialNeeds = backdrop.querySelector('#student-special-needs-select').value;
+
+      store.addStudent({
+        name,
+        grade,
+        schoolId,
+        schoolName,
+        stopName,
+        guardianName,
+        guardianPhone,
+        specialNeeds,
+        busId: "UNASSIGNED",
+        routeId: "UNASSIGNED"
+      });
+    } catch (err) {
+      console.warn('Student addition error:', err);
+      store.showToast('Failed to register student. Please retry.', 'danger');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `${Icons.check(16, '#fff')} Register & Auto-Assign Route`;
+      }
+      isSubmitting = false;
+    }
   });
 
   return backdrop;

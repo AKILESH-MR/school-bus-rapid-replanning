@@ -162,12 +162,15 @@ export function validateGpsPayload(payload, options = {}) {
  * Automatically calculates GPS freshness and classifies telemetry state into:
  * LIVE / LAST_KNOWN / STALE / NO_SIGNAL / MANUAL.
  *
- * Rules:
- * - If isManualOverride === true -> classified as MANUAL (dispatcher verified fix)
- * - If signal is lost / missing or ageSeconds > 600s -> NO_SIGNAL
- * - If ageSeconds > 120s -> STALE
- * - If ageSeconds > 60s -> LAST_KNOWN
- * - If ageSeconds <= 60s -> LIVE
+ * TELEMATICS CLASSIFICATION HIERARCHY & REASONING:
+ * 1. MANUAL (VHF Radio Override): Prioritized over automated pings because human dispatchers
+ *    actively verify field positions via voice radio during dead zones or hardware malfunctions.
+ * 2. LIVE (Age <= 60s): Active streaming fix with high trust (trustLevel: HIGH). Full distance confidence.
+ * 3. LAST_KNOWN (Age 61s - 120s): Minor telemetry latency (trustLevel: MEDIUM). Flagged with reduced trust.
+ * 4. STALE (Age 121s - 600s): Serious telemetry delay (>2m old, trustLevel: LOW). Enforces `requiresVerification: true`
+ *    and distance expansion penalties (+60%) to prevent over-optimistic dispatching.
+ * 5. NO_SIGNAL (Age > 600s or signal loss): Hardware disconnected or dead zone (trustLevel: NONE).
+ *    Refuses to fabricate coordinates; relies strictly on cached last-known position and requires manual confirmation.
  *
  * @param {number|string|Date} timestamp
  * @param {object} [options]
@@ -204,7 +207,9 @@ export function classifyGpsFreshness(timestamp, options = {}) {
   // Calculate age in seconds
   const ageSeconds = isNaN(timestampMs) ? 999999 : Math.max(0, Math.floor((refTime - timestampMs) / 1000));
 
-  // 1. Check MANUAL override first (Human dispatcher authority)
+  // 1. Check MANUAL override first (Human dispatcher authority):
+  // When a dispatcher inputs coordinates via radio, automated incoming telemetry is captured in
+  // background storage without overriding the dispatcher's pinned fix until explicitly unlocked.
   if (options.isManualOverride === true) {
     return {
       status: GPS_STATUS.MANUAL,

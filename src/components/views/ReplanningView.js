@@ -11,6 +11,10 @@ export function renderReplanningView() {
   const aiPlan = currentDisruption?.aiRecommendation;
   const isAccepted = currentDisruption?.status === 'accepted';
   const isRejected = currentDisruption?.status === 'rejected';
+  const isPlanLoading = state.loadingStates?.planDecision;
+  const isReplanGenLoading = state.loadingStates?.replanGeneration;
+  const planError = state.errorStates?.planDecision;
+  const replanGenError = state.errorStates?.replanGeneration;
 
   const container = document.createElement('div');
   container.className = 'content-body';
@@ -50,7 +54,15 @@ export function renderReplanningView() {
               <div class="incident-card ${d.severity}" style="${isSelected ? 'border: 2px solid #2563EB; background: #fff;' : ''}" data-select-id="${d.id}">
                 <div class="incident-top">
                   <span class="incident-title" style="font-size: 0.82rem;">${d.title}</span>
-                  <span class="severity-pill ${d.severity}">${d.severity}</span>
+                  <div style="display: flex; gap: 4px; align-items: center;">
+                    ${d.status === 'accepted' ? `
+                      <span style="background: #DCFCE7; color: #166534; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 9999px;">ACCEPTED</span>
+                    ` : d.status === 'rejected' ? `
+                      <span style="background: #FEE2E2; color: #991B1B; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 9999px;">REJECTED</span>
+                    ` : `
+                      <span class="severity-pill ${d.severity}">${d.severity}</span>
+                    `}
+                  </div>
                 </div>
                 <div class="incident-meta" style="margin-bottom: 0;">
                   <span>⏱ ${d.reportedAt}</span>
@@ -76,6 +88,18 @@ export function renderReplanningView() {
 
       <!-- Right Column: AI Plan Review & Action -->
       <div class="plan-comparison-area">
+        ${replanGenError && (replanGenError.disruptionId === currentDisruption?.id || !aiPlan) ? `
+          <div class="replan-gen-error-banner" style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem; color: #991B1B;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              ${Icons.alertTriangle(18, '#DC2626')}
+              <span><b>Replan Synchronization:</b> ${replanGenError.message}</span>
+            </div>
+            <button id="retry-replan-gen-btn" class="action-btn danger" style="padding: 4px 12px; font-size: 0.75rem;" ${isReplanGenLoading ? 'disabled' : ''}>
+              ${isReplanGenLoading ? 'Generating recommendation...' : 'Retry Replan'}
+            </button>
+          </div>
+        ` : ''}
+
         ${currentDisruption && aiPlan ? `
           <!-- Primary AI Recommendation Card -->
           <div class="ai-recommendation-card">
@@ -86,8 +110,13 @@ export function renderReplanningView() {
             <div class="plan-header">
               <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
                 <span class="plan-strategy-pill">${aiPlan.strategy}</span>
-                <div style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #92400E; background: #FEF3C7; border: 1px solid #FDE68A; padding: 4px 10px; border-radius: 9999px; font-weight: 700;">
-                  ${Icons.shield(14, '#92400E')} HUMAN DECISION REQUIRED — DISPATCHER APPROVAL
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <button class="action-btn secondary" id="regenerate-replan-btn" style="padding: 3px 8px; font-size: 0.72rem; border-color: #CBD5E1;" ${isReplanGenLoading ? 'disabled' : ''}>
+                    ${Icons.refreshCw(12, 'currentColor')} ${isReplanGenLoading ? 'Evaluating...' : 'Re-evaluate'}
+                  </button>
+                  <div style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #92400E; background: #FEF3C7; border: 1px solid #FDE68A; padding: 4px 10px; border-radius: 9999px; font-weight: 700;">
+                    ${Icons.shield(14, '#92400E')} HUMAN DECISION REQUIRED — DISPATCHER APPROVAL
+                  </div>
                 </div>
               </div>
               <h3 class="plan-title" style="margin-top: 6px; margin-bottom: 4px;">
@@ -240,20 +269,32 @@ export function renderReplanningView() {
                   </div>
 
                   <!-- DATA QUALITY -->
-                  <div style="background: ${explanationData.dataQuality.isStale ? '#FEF2F2' : '#F8FAFC'}; border: 1px solid ${explanationData.dataQuality.isStale ? '#FECACA' : '#E2E8F0'}; border-left: 4px solid ${explanationData.dataQuality.isStale ? '#DC2626' : '#64748B'}; border-radius: 10px; padding: 16px;">
-                    <div style="font-size: 0.8rem; font-weight: 800; color: ${explanationData.dataQuality.isStale ? '#991B1B' : '#475569'}; text-transform: uppercase; margin-bottom: 8px;">
-                      DATA QUALITY:
+                  <div style="background: ${explanationData.dataQuality.isStale || explanationData.dataQuality.gpsStatus === 'NO_SIGNAL' ? '#FEF2F2' : (explanationData.dataQuality.gpsStatus === 'MANUAL' ? '#EFF6FF' : '#F8FAFC')}; border: 1px solid ${explanationData.dataQuality.isStale || explanationData.dataQuality.gpsStatus === 'NO_SIGNAL' ? '#FECACA' : (explanationData.dataQuality.gpsStatus === 'MANUAL' ? '#BFDBFE' : '#E2E8F0')}; border-left: 4px solid ${explanationData.dataQuality.isStale || explanationData.dataQuality.gpsStatus === 'NO_SIGNAL' ? '#DC2626' : (explanationData.dataQuality.gpsStatus === 'MANUAL' ? '#2563EB' : '#64748B')}; border-radius: 10px; padding: 16px;">
+                    <div style="font-size: 0.8rem; font-weight: 800; color: ${explanationData.dataQuality.isStale || explanationData.dataQuality.gpsStatus === 'NO_SIGNAL' ? '#991B1B' : (explanationData.dataQuality.gpsStatus === 'MANUAL' ? '#1E40AF' : '#475569')}; text-transform: uppercase; margin-bottom: 8px;">
+                      DATA QUALITY & GPS CONFIDENCE:
                     </div>
                     <div style="font-size: 0.88rem; color: #334155; display: flex; flex-direction: column; gap: 4px;">
-                      <div>GPS: <b style="color: ${explanationData.dataQuality.gpsStatus === 'LIVE' ? '#059669' : '#DC2626'};">${explanationData.dataQuality.gpsStatus}</b></div>
+                      <div>GPS Status: <b style="color: ${explanationData.dataQuality.gpsStatus === 'LIVE' ? '#059669' : (explanationData.dataQuality.gpsStatus === 'MANUAL' ? '#2563EB' : '#DC2626')};">${explanationData.dataQuality.gpsStatus}</b></div>
                       <div>Last update: <b>${explanationData.dataQuality.lastUpdate}</b></div>
                       <div>Source: <b>${explanationData.dataQuality.source || 'mock_telematics'}</b></div>
                     </div>
-                    ${explanationData.dataQuality.warning ? `
+                    ${explanationData.dataQuality.gpsStatus === 'STALE' ? `
+                      <div style="margin-top: 10px; padding: 8px 12px; background: #FFF7ED; border: 1px solid #FDBA74; border-radius: 6px; font-size: 0.78rem; color: #C2410C; font-weight: 700;">
+                        ⚠️ STALE GPS (>2m old): Reduced confidence in distance calculations. Dispatcher verification required.
+                      </div>
+                    ` : explanationData.dataQuality.gpsStatus === 'NO_SIGNAL' ? `
+                      <div style="margin-top: 10px; padding: 8px 12px; background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 6px; font-size: 0.78rem; color: #B91C1C; font-weight: 700;">
+                        📡 NO SIGNAL: Telematics signal lost. Zero distance confidence. Immediate verification required before dispatch.
+                      </div>
+                    ` : explanationData.dataQuality.gpsStatus === 'MANUAL' ? `
+                      <div style="margin-top: 10px; padding: 8px 12px; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 6px; font-size: 0.78rem; color: #1D4ED8; font-weight: 700;">
+                        📍 MANUAL CHECKPOINT: Location set manually by dispatcher. Reduced distance confidence compared to live lock.
+                      </div>
+                    ` : (explanationData.dataQuality.warning ? `
                       <div style="margin-top: 10px; padding: 8px 12px; background: #FFF; border: 1px solid #FCA5A5; border-radius: 6px; font-size: 0.78rem; color: #B91C1C; font-weight: 700;">
                         WARNING: "${explanationData.dataQuality.warning}"
                       </div>
-                    ` : ''}
+                    ` : '')}
                     ${explanationData.dataQuality.requiresDispatcherVerification ? `
                       <div style="margin-top: 6px; font-size: 0.74rem; color: #D97706; font-weight: 700;">
                         ⚠️ Requires Dispatcher Verification When Appropriate
@@ -689,13 +730,26 @@ export function renderReplanningView() {
 
                 <!-- Decision Actions -->
                 <div style="display: flex; justify-content: flex-end; gap: 12px;">
-                  <button class="action-btn secondary" id="reject-modified-plan-btn" style="color: #DC2626; border-color: #FECACA;">
-                    ${Icons.x(16, '#DC2626')} Reject Modified Plan
+                  <button class="action-btn secondary" id="reject-modified-plan-btn" style="color: #DC2626; border-color: #FECACA;" ${isPlanLoading ? 'disabled' : ''}>
+                    ${Icons.x(16, '#DC2626')} Discard Modifications
                   </button>
-                  <button class="action-btn primary" id="accept-modified-plan-btn" style="background: #059669; padding: 10px 24px; font-size: 0.92rem;">
-                    ${Icons.check(18, '#fff')} Accept & Apply Modified Plan
+                  <button class="action-btn primary" id="accept-modified-plan-btn" style="background: #059669; padding: 10px 24px; font-size: 0.92rem;" ${isPlanLoading ? 'disabled' : ''}>
+                    ${Icons.check(18, '#fff')} ${isPlanLoading ? 'Applying modified plan...' : 'Accept & Apply Modified Plan'}
                   </button>
                 </div>
+              </div>
+            ` : ''}
+
+            <!-- Operation Error Banner & Retry -->
+            ${planError ? `
+              <div class="plan-decision-error-banner" style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem; color: #991B1B;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  ${Icons.alertTriangle(18, '#DC2626')}
+                  <span><b>Decision Sync Error:</b> ${planError.message}</span>
+                </div>
+                <button id="retry-plan-decision-btn" class="action-btn danger" style="padding: 4px 12px; font-size: 0.75rem;" ${isPlanLoading ? 'disabled' : ''}>
+                  ${isPlanLoading ? 'Applying...' : 'Retry Action'}
+                </button>
               </div>
             ` : ''}
 
@@ -718,14 +772,14 @@ export function renderReplanningView() {
                   Plan Rejected by Dispatcher (Manual Override: ${currentDisruption.rejectionReason || 'Dispatcher Discretion'})
                 </div>
               ` : `
-                <button class="action-btn secondary" id="reject-plan-btn" style="color: #DC2626; border-color: #FECACA;">
-                  ${Icons.x(16, '#DC2626')} Reject
+                <button class="action-btn secondary" id="reject-plan-btn" style="color: #DC2626; border-color: #FECACA;" ${isPlanLoading ? 'disabled' : ''}>
+                  ${Icons.x(16, '#DC2626')} ${isPlanLoading ? 'Rejecting plan...' : 'Reject'}
                 </button>
-                <button class="action-btn secondary" id="modify-plan-btn">
+                <button class="action-btn secondary" id="modify-plan-btn" ${isPlanLoading ? 'disabled' : ''}>
                   ${Icons.settings(16, 'currentColor')} Modify
                 </button>
-                <button class="action-btn primary" id="accept-plan-btn" style="padding: 10px 24px; font-size: 0.92rem;">
-                  ${Icons.check(18, '#fff')} Accept
+                <button class="action-btn primary" id="accept-plan-btn" style="padding: 10px 24px; font-size: 0.92rem;" ${isPlanLoading ? 'disabled' : ''}>
+                  ${Icons.check(18, '#fff')} ${isPlanLoading ? 'Applying approved plan...' : 'Accept'}
                 </button>
               `}
             </div>
@@ -764,6 +818,33 @@ export function renderReplanningView() {
               </div>
             ` : ''}
           </div>
+        ` : currentDisruption ? `
+          <div class="panel-card" style="padding: 32px; border-top: 4px solid #2563EB;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+              <div>
+                <span class="plan-strategy-pill">${currentDisruption.type || 'Operational Disruption'}</span>
+                <h3 style="font-size: 1.2rem; font-weight: 800; color: #0F2747; margin: 8px 0 4px 0;">
+                  ${currentDisruption.title}
+                </h3>
+                <p style="font-size: 0.85rem; color: #64748B; margin: 0;">
+                  Incident Location: <b>${currentDisruption.location || 'Route Location'}</b> • Impact: <b>${currentDisruption.impact || 'Active Incident'}</b>
+                </p>
+              </div>
+              <span class="severity-pill ${currentDisruption.severity}">${currentDisruption.severity}</span>
+            </div>
+
+            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+              <div style="font-size: 0.88rem; font-weight: 700; color: #0F2747; margin-bottom: 6px;">
+                Replan Recommendation Status
+              </div>
+              <p style="font-size: 0.82rem; color: #475569; margin: 0 0 16px 0; line-height: 1.5;">
+                No automated replanning solution has been calculated yet for this disruption. Click below to evaluate available fleet vehicles, driver schedules, and student safety constraints.
+              </p>
+              <button class="action-btn primary" id="generate-replan-btn" style="padding: 10px 24px; font-size: 0.92rem;" ${isReplanGenLoading ? 'disabled' : ''}>
+                ${Icons.cpu(18, '#fff')} ${isReplanGenLoading ? 'Generating recommendation...' : 'Generate Replan'}
+              </button>
+            </div>
+          </div>
         ` : `
           <div class="panel-card" style="padding: 40px; text-align: center;">
             <p style="color: #64748B;">No active incident selected. Select an incident from the left to view replanning solutions.</p>
@@ -787,10 +868,29 @@ export function renderReplanningView() {
       });
     });
 
+    // Retry Plan Decision
+    const retryPlanBtn = container.querySelector('#retry-plan-decision-btn');
+    if (retryPlanBtn) {
+      retryPlanBtn.addEventListener('click', () => {
+        if (store.isOperationLoading('planDecision')) return;
+        store.retryPlanDecision(currentDisruption?.id);
+      });
+    }
+
+    // Retry Replan Generation
+    const retryReplanGenBtn = container.querySelector('#retry-replan-gen-btn');
+    if (retryReplanGenBtn) {
+      retryReplanGenBtn.addEventListener('click', () => {
+        if (store.isOperationLoading('replanGeneration')) return;
+        store.retryGenerateReplan(currentDisruption?.id);
+      });
+    }
+
     // Accept Plan
     const acceptBtn = container.querySelector('#accept-plan-btn');
     if (acceptBtn) {
       acceptBtn.addEventListener('click', () => {
+        if (store.isOperationLoading('planDecision')) return;
         store.acceptAIPlan(currentDisruption.id);
       });
     }
@@ -799,6 +899,7 @@ export function renderReplanningView() {
     const rejectBtn = container.querySelector('#reject-plan-btn');
     if (rejectBtn) {
       rejectBtn.addEventListener('click', () => {
+        if (store.isOperationLoading('planDecision')) return;
         store.rejectAIPlan(currentDisruption.id);
       });
     }
@@ -856,6 +957,7 @@ export function renderReplanningView() {
     const acceptModBtn = container.querySelector('#accept-modified-plan-btn');
     if (acceptModBtn) {
       acceptModBtn.addEventListener('click', () => {
+        if (store.isOperationLoading('planDecision')) return;
         store.acceptModifiedPlan(currentDisruption.id);
       });
     }
@@ -864,7 +966,26 @@ export function renderReplanningView() {
     const rejectModBtn = container.querySelector('#reject-modified-plan-btn');
     if (rejectModBtn) {
       rejectModBtn.addEventListener('click', () => {
+        if (store.isOperationLoading('planDecision')) return;
         store.rejectModifiedPlan(currentDisruption.id);
+      });
+    }
+
+    // Generate Replan for Selected Incident
+    const genReplanBtn = container.querySelector('#generate-replan-btn');
+    if (genReplanBtn) {
+      genReplanBtn.addEventListener('click', () => {
+        if (store.isOperationLoading('replanGeneration')) return;
+        store.generateReplan(currentDisruption?.id);
+      });
+    }
+
+    // Re-evaluate Plan Button
+    const regenBtn = container.querySelector('#regenerate-replan-btn');
+    if (regenBtn) {
+      regenBtn.addEventListener('click', () => {
+        if (store.isOperationLoading('replanGeneration')) return;
+        store.generateReplan(currentDisruption?.id);
       });
     }
 
@@ -872,10 +993,8 @@ export function renderReplanningView() {
     const rerunBtn = container.querySelector('#re-run-simulation-btn');
     if (rerunBtn) {
       rerunBtn.addEventListener('click', () => {
-        store.showToast('Replanning Engine: Re-evaluating fleet constraints and driver availability...', 'info');
-        setTimeout(() => {
-          store.showToast('Replanning Re-evaluation complete: Verified with active driver availability.', 'success');
-        }, 1000);
+        if (store.isOperationLoading('replanGeneration')) return;
+        store.generateReplan(currentDisruption?.id);
       });
     }
   }, 50);
